@@ -28,10 +28,63 @@ from argparse import ArgumentParser
 
 from keras.layers import Input, Conv2D, Conv2DTranspose, Dense, Reshape, MaxPooling2D, UpSampling2D, Flatten, Cropping2D
 from keras.models import Model, Sequential
+from keras.engine.topology import Layer
 
 
 INDEX_FROM = 3
 CHECK = 5
+
+class KLLayer(Layer):
+
+    """
+    Identity transform layer that adds KL divergence
+    to the final model loss.
+
+    http://tiao.io/posts/implementing-variational-autoencoders-in-keras-beyond-the-quickstart-tutorial/
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.is_placeholder = True
+        super().__init__(*args, **kwargs)
+
+    def call(self, inputs):
+
+        mu, log_var = inputs
+
+        kl_batch = - .5 * K.sum(1 + log_var -
+                                K.square(mu) -
+                                K.exp(log_var), axis=-1)
+
+        self.add_loss(K.mean(kl_batch), inputs=inputs)
+
+        return inputs
+
+class Sample(Layer):
+
+    """
+    Performs sampling step
+
+    http://tiao.io/posts/implementing-variational-autoencoders-in-keras-beyond-the-quickstart-tutorial/
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.is_placeholder = True
+        super().__init__(*args, **kwargs)
+
+    def call(self, inputs):
+
+        mu, log_var = inputs
+
+        eps = Input(tensor=K.random_normal(shape=K.shape(mu) ))
+
+        z = K.exp(.5 * log_var) * eps + mu
+
+        return z
+
+    def compute_output_shape(self, input_shape):
+        shape_mu, _ = input_shape
+        return shape_mu
+
 
 def decode(seq):
 
@@ -48,9 +101,8 @@ def decode(seq):
 def sparse_loss(y_true, y_pred):
     return tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y_true,
                                                           logits=y_pred)
-
 def go(options):
-    max_sequence_length = 500
+    slength = 500
     embedding_length = 32
     top_words = 10000
     lstm_hidden = 256
@@ -60,25 +112,31 @@ def go(options):
     # Load only training sequences
     (x, _), _ = imdb.load_data(num_words=top_words)
 
-    x = sequence.pad_sequences(x, maxlen=max_sequence_length)
+    x = sequence.pad_sequences(x, maxlen=slength)
 
-    encoder = Sequential()
-    encoder.add(Embedding(top_words, embedding_length, input_length=max_sequence_length))
-    encoder.add(Bidirectional(LSTM(lstm_hidden)))
-    encoder.add(Dense(options.hidden))
+    input = Input(shape=(slength, ))
+    h = Embedding(top_words, embedding_length, input_length=slength)(input)
+    print(h)
+    h = Bidirectional(LSTM(lstm_hidden))(h)
+    zmean = Dense(options.hidden)(h)
+    zlsigma = Dense(options.hidden)(h)
 
-    encoder.summary()
+    encoder = Model(input, (zmean, zlsigma))
 
     decoder = Sequential()
-    decoder.add(RepeatVector(max_sequence_length, input_shape=(options.hidden,)))
+    decoder.add(RepeatVector(slength, input_shape=(options.hidden,)))
     decoder.add(LSTM(lstm_hidden, return_sequences=True))
     decoder.add(TimeDistributed(Dense(top_words)))
 
     decoder.summary()
 
-    auto = Sequential()
-    auto.add(encoder)
-    auto.add(decoder)
+    input = Input(shape=(slength, ))
+    h = encoder(input)
+    h = KLLayer()(h) # computes the KL loss and stores it for later
+    h = Sample()(h)  # implements the reparam trick
+    out = decoder(h)
+
+    auto = Model(input, out)
 
     auto.summary()
 
