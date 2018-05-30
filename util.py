@@ -14,7 +14,7 @@ Source: https://github.com/ChunML/seq2seq/blob/master/seq2seq_utils.py
 
 """
 
-def load_data(source, dist, max_len=500, vocab_size=10000):
+def load_data(source, dist, max_len, vocab_size=10000):
 
     # Reading raw text from source and destination files
     f = open(source, 'r')
