@@ -16,7 +16,7 @@ import tensorflow as tf
 
 from sklearn import datasets
 
-import math, sys
+import math, sys, os
 import numpy as np
 
 import matplotlib
@@ -30,6 +30,7 @@ from keras.layers import Input, Conv2D, Conv2DTranspose, Dense, Reshape, MaxPool
 from keras.models import Model, Sequential
 from keras.engine.topology import Layer
 
+import util
 
 INDEX_FROM = 3
 CHECK = 5
@@ -64,7 +65,6 @@ class Sample(Layer):
     """
     Performs sampling step
 
-    http://tiao.io/posts/implementing-variational-autoencoders-in-keras-beyond-the-quickstart-tutorial/
     """
 
     def __init__(self, *args, **kwargs):
@@ -86,7 +86,7 @@ class Sample(Layer):
         return shape_mu
 
 
-def decode(seq):
+def decode_imdb(seq):
 
     word_to_id = keras.datasets.imdb.get_word_index()
     word_to_id = {k: (v + INDEX_FROM) for k, v in word_to_id.items()}
@@ -109,10 +109,32 @@ def go(options):
 
     print('devices', device_lib.list_local_devices())
 
-    # Load only training sequences
-    (x, _), _ = imdb.load_data(num_words=top_words)
+    if options.task == 'europarl':
 
-    x = sequence.pad_sequences(x, maxlen=slength, padding='pre', truncating='post')
+        dir = options.data_dir
+        x, x_vocab_len, x_word_to_ix, x_ix_to_word, y, y_vocab_len, y_word_to_ix, y_ix_to_word = \
+            util.load_data(dir+os.sep+'europarl-v8.fi-en.en', dir+os.sep+'europarl-v8.fi-en.fi', top_words)
+
+        # Finding the length of the longest sequence
+        x_max_len = max([len(sentence) for sentence in x])
+        y_max_len = max([len(sentence) for sentence in y])
+
+        # Padding zeros to make all sequences have a same length with the longest one
+        X = sequence.pad_sequences(x, maxlen=x_max_len, dtype='int32')
+        y = sequence.pad_sequences(y, maxlen=y_max_len, dtype='int32')
+
+        def decode(seq):
+            return ' '.join(x_ix_to_word[id] for id in seq)
+
+    else:
+        # Load only training sequences
+        (x, _), _ = imdb.load_data(num_words=top_words)
+
+        x = sequence.pad_sequences(x, maxlen=slength, padding='pre', truncating='post')
+
+        decode = decode_imdb
+
+    print('Data Loaded. Size ', x.shape)
 
     input = Input(shape=(slength, ))
     h = Embedding(top_words, embedding_length, input_length=slength)(input)
@@ -189,6 +211,17 @@ if __name__ == "__main__":
                         dest="batch",
                         help="Batch size",
                         default=32, type=int)
+
+    parser.add_argument("-t", "--task",
+                        dest="task",
+                        help="Task",
+                        default='imdb', type=str)
+
+
+    parser.add_argument("-D", "--data-directory",
+                        dest="data_dir",
+                        help="Data directory",
+                        default='./data', type=str)
 
     parser.add_argument("-H", "--hidden-size",
                         dest="hidden",
