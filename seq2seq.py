@@ -41,7 +41,7 @@ def decode(seq):
 
     id_to_word = {value: key for key, value in word_to_id.items()}
 
-    print(' '.join(id_to_word[id] for id in seq ))
+    return ' '.join(id_to_word[id] for id in seq)
 
 def sparse_loss(y_true, y_pred):
     return tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y_true,
@@ -95,11 +95,11 @@ def go(options):
 
         sub = x[:CHECK, :]
         out = auto.predict(sub)
-        Y = K.argmax(out, axis=-1)
+        y = np.argmax(out, axis=-1)
 
         for i in range(CHECK):
-            print('in   ', decode(x[i, :]))
-            print('out   ', decode(Y[i, :]))
+            print('in   ',  decode(x[i, :]))
+            print('out   ', decode(y[i, :]))
             print()
 
 if __name__ == "__main__":
