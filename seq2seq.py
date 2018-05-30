@@ -113,15 +113,19 @@ def go(options):
 
         dir = options.data_dir
         x, x_vocab_len, x_word_to_ix, x_ix_to_word, y, y_vocab_len, y_word_to_ix, y_ix_to_word = \
-            util.load_data(dir+os.sep+'europarl-v8.fi-en.en', dir+os.sep+'europarl-v8.fi-en.fi', vocab_size=top_words, max_len=slength)
+            util.load_data(dir+os.sep+'europarl-v8.fi-en.en', dir+os.sep+'europarl-v8.fi-en.fi', vocab_size=top_words, max_len=10000)
+
+        print(len(x), ' sentences loaded')
 
         # Finding the length of the longest sequence
         x_max_len = max([len(sentence) for sentence in x])
         y_max_len = max([len(sentence) for sentence in y])
 
+        print('max sequence length ', x_max_len)
+
         # Padding zeros to make all sequences have a same length with the longest one
-        x = sequence.pad_sequences(x, maxlen=x_max_len, dtype='int32', padding='pre', truncating='post')
-        y = sequence.pad_sequences(y, maxlen=y_max_len, dtype='int32', padding='pre', truncating='post')
+        x = sequence.pad_sequences(x, maxlen=slength, dtype='int32', padding='pre', truncating='post')
+        y = sequence.pad_sequences(y, maxlen=slength, dtype='int32', padding='pre', truncating='post')
 
         def decode(seq):
             return ' '.join(x_ix_to_word[id] for id in seq)
