@@ -10,6 +10,8 @@ from keras.layers import \
 from keras.optimizers import Adam
 from tensorflow.python.client import device_lib
 
+from keras.utils import multi_gpu_model
+
 import tensorflow as tf
 
 from sklearn import datasets
@@ -80,6 +82,9 @@ def go(options):
 
     auto.summary()
 
+    if options.num_gpu is not None:
+        auto = multi_gpu_model(auto, gpus=options.num_gpu)
+
     opt = keras.optimizers.RMSprop(lr=options.lr)
 
     auto.compile(opt, keras.losses.sparse_categorical_crossentropy)
@@ -131,6 +136,11 @@ if __name__ == "__main__":
                         dest="hidden",
                         help="Latent vector size",
                         default=64, type=int)
+
+    parser.add_argument("-g", "--num-gpu",
+                        dest="num_gpu",
+                        help="How many GPUs to use",
+                        default=None, type=int)
 
     options = parser.parse_args()
 
