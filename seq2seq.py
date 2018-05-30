@@ -120,7 +120,7 @@ def go(options):
         y_max_len = max([len(sentence) for sentence in y])
 
         # Padding zeros to make all sequences have a same length with the longest one
-        X = sequence.pad_sequences(x, maxlen=x_max_len, dtype='int32')
+        x = sequence.pad_sequences(x, maxlen=x_max_len, dtype='int32')
         y = sequence.pad_sequences(y, maxlen=y_max_len, dtype='int32')
 
         def decode(seq):
