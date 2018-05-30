@@ -116,6 +116,7 @@ def go(options):
             util.load_data(dir+os.sep+'europarl-v8.fi-en.en', dir+os.sep+'europarl-v8.fi-en.fi', vocab_size=top_words, max_len=10000)
 
         print(len(x), ' sentences loaded')
+        print(x[:5])
 
         # Finding the length of the longest sequence
         x_max_len = max([len(sentence) for sentence in x])
@@ -126,6 +127,8 @@ def go(options):
         # Padding zeros to make all sequences have a same length with the longest one
         x = sequence.pad_sequences(x, maxlen=slength, dtype='int32', padding='pre', truncating='post')
         y = sequence.pad_sequences(y, maxlen=slength, dtype='int32', padding='pre', truncating='post')
+
+        print(x[:5, :])
 
         def decode(seq):
             return ' '.join(x_ix_to_word[id] for id in seq)
