@@ -102,10 +102,10 @@ def sparse_loss(y_true, y_pred):
     return tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y_true,
                                                           logits=y_pred)
 def go(options):
-    slength = 500
+    slength = options.max_length
     embedding_length = 32
-    top_words = 10000
-    lstm_hidden = 256
+    top_words = options.top_words
+    lstm_hidden = options.lstm_capacity
 
     print('devices', device_lib.list_local_devices())
 
@@ -195,10 +195,26 @@ if __name__ == "__main__":
                         help="Latent vector size",
                         default=64, type=int)
 
+    parser.add_argument("-L", "--lstm-hidden-size",
+                        dest="lstm_capacity",
+                        help="LSTM capacity",
+                        default=256, type=int)
+
+
     parser.add_argument("-g", "--num-gpu",
                         dest="num_gpu",
                         help="How many GPUs to use",
                         default=None, type=int)
+
+    parser.add_argument("-m", "--max_length",
+                        dest="max_length",
+                        help="Max length",
+                        default=500, type=int)
+
+    parser.add_argument("-w", "--top_words",
+                        dest="top_words",
+                        help="Top words",
+                        default=10000, type=int)
 
     options = parser.parse_args()
 
