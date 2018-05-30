@@ -6,7 +6,7 @@ from keras.datasets import imdb
 from keras.models import Sequential, Model
 from keras.layers import \
     Dense, Activation, Conv2D, MaxPool2D, Dropout, Flatten, Input, Reshape, LSTM, Embedding, RepeatVector,\
-    TimeDistributed
+    TimeDistributed, Bidirectional
 from keras.optimizers import Adam
 from tensorflow.python.client import device_lib
 
@@ -64,7 +64,7 @@ def go(options):
 
     encoder = Sequential()
     encoder.add(Embedding(top_words, embedding_length, input_length=max_sequence_length))
-    encoder.add(LSTM(lstm_hidden))
+    encoder.add(Bidirectional(LSTM(lstm_hidden)))
     encoder.add(Dense(options.hidden))
 
     encoder.summary()
