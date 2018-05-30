@@ -112,7 +112,7 @@ def go(options):
     # Load only training sequences
     (x, _), _ = imdb.load_data(num_words=top_words)
 
-    x = sequence.pad_sequences(x, maxlen=slength)
+    x = sequence.pad_sequences(x, maxlen=slength, padding='pre', truncating='post')
 
     input = Input(shape=(slength, ))
     h = Embedding(top_words, embedding_length, input_length=slength)(input)
