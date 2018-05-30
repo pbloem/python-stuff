@@ -125,8 +125,8 @@ def go(options):
         print('max sequence length ', x_max_len)
 
         # Padding zeros to make all sequences have a same length with the longest one
-        x = sequence.pad_sequences(x, maxlen=slength, dtype='int32', padding='pre', truncating='post')
-        y = sequence.pad_sequences(y, maxlen=slength, dtype='int32', padding='pre', truncating='post')
+        x = sequence.pad_sequences(x, maxlen=slength, dtype='int32', padding='post', truncating='post')
+        y = sequence.pad_sequences(y, maxlen=slength, dtype='int32', padding='post', truncating='post')
 
         print(x[:5, :])
 
@@ -137,7 +137,7 @@ def go(options):
         # Load only training sequences
         (x, _), _ = imdb.load_data(num_words=top_words)
 
-        x = sequence.pad_sequences(x, maxlen=slength, padding='pre', truncating='post')
+        x = sequence.pad_sequences(x, maxlen=slength, padding='post', truncating='post')
 
         decode = decode_imdb
 
