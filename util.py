@@ -15,7 +15,7 @@ Source: https://github.com/ChunML/seq2seq/blob/master/seq2seq_utils.py
 """
 
 # Sentence limit. Useful for debugging
-LIMIT = None
+LIMIT = 2000000
 
 def load_data(source, dist, max_len=100, vocab_size=10000):
 
@@ -39,9 +39,9 @@ def load_data(source, dist, max_len=100, vocab_size=10000):
 
     # Creating the vocabulary set with the most common words
     dist = FreqDist(np.hstack(X))
-    X_vocab = dist.most_common(vocab_size-1)
+    X_vocab = dist.most_common(vocab_size-2)
     dist = FreqDist(np.hstack(y))
-    y_vocab = dist.most_common(vocab_size-1)
+    y_vocab = dist.most_common(vocab_size-2)
 
     # Creating an array of words from the vocabulary set, we will use this array as index-to-word dictionary
     X_ix_to_word = [word[0] for word in X_vocab]

@@ -116,6 +116,7 @@ def go(options):
             util.load_data(dir+os.sep+'europarl-v8.fi-en.en', dir+os.sep+'europarl-v8.fi-en.fi', vocab_size=top_words, max_len=10000)
 
         print(len(x), ' sentences loaded')
+        print(len(x_ix_to_word), ' distinct words')
         print(x[:5])
 
         # Finding the length of the longest sequence
@@ -172,7 +173,7 @@ def go(options):
     if options.num_gpu is not None:
         auto = multi_gpu_model(auto, gpus=options.num_gpu)
 
-    opt = keras.optimizers.RMSprop(lr=options.lr)
+    opt = keras.optimizers.Adam(lr=options.lr)
 
     auto.compile(opt, keras.losses.sparse_categorical_crossentropy)
 
