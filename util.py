@@ -14,6 +14,9 @@ Source: https://github.com/ChunML/seq2seq/blob/master/seq2seq_utils.py
 
 """
 
+# Sentence limit. Useful for debugging
+LIMIT = 5000
+
 def load_data(source, dist, max_len=100, vocab_size=10000):
 
     # Reading raw text from source and destination files
@@ -23,6 +26,12 @@ def load_data(source, dist, max_len=100, vocab_size=10000):
     f = open(dist, 'r')
     y_data = f.read()
     f.close()
+
+    print('raw data read')
+
+    if LIMIT is not None:
+        X_data = X_data[:LIMIT]
+        y_data = y_data[:LIMIT]
 
     # Splitting raw text into array of sequences
     X = [text_to_word_sequence(x)[::-1] for x, y in zip(X_data.split('\n'), y_data.split('\n')) if len(x) > 0 and len(y) > 0 and len(x) <= max_len and len(y) <= max_len]
