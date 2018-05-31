@@ -161,7 +161,7 @@ def go(options):
 
     input = Input(shape=(slength, ))
     h = encoder(input)
-    # h = KLLayer()(h) # computes the KL loss and stores it for later
+    h = KLLayer()(h) # computes the KL loss and stores it for later
     h = Sample()(h)  # implements the reparam trick
     out = decoder(h)
 

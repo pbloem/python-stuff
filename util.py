@@ -15,7 +15,7 @@ Source: https://github.com/ChunML/seq2seq/blob/master/seq2seq_utils.py
 """
 
 # Sentence limit. Useful for debugging
-LIMIT = 5000
+LIMIT = None
 
 def load_data(source, dist, max_len=100, vocab_size=10000):
 
