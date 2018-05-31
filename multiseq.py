@@ -102,7 +102,9 @@ def sparse_loss(y_true, y_pred):
     return tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y_true,
                                                           logits=y_pred)
 def go(options):
+
     slength = options.max_length
+    embedding_length = 32
     top_words = options.top_words
     lstm_hidden = options.lstm_capacity
 
@@ -134,38 +136,58 @@ def go(options):
             return ' '.join(x_ix_to_word[id] for id in seq)
 
     else:
-        # Load only training sequences
-        (x, _), _ = imdb.load_data(num_words=top_words)
 
-        x = sequence.pad_sequences(x, maxlen=slength, padding='post', truncating='post')
-
-        decode = decode_imdb
+       raise Exception('task {} not found.'.format(options.task))
 
     print('Data Loaded. Size ', x.shape)
 
     input = Input(shape=(slength, ))
-    h = Embedding(top_words, options.embedding_size, input_length=slength)(input)
-    print(h)
+    h = Embedding(top_words, embedding_length, input_length=slength)(input)
     h = Bidirectional(LSTM(lstm_hidden))(h)
     zmean = Dense(options.hidden)(h)
     zlsigma = Dense(options.hidden)(h)
 
-    encoder = Model(input, (zmean, zlsigma))
-
-    decoder = Sequential()
-    decoder.add(RepeatVector(slength, input_shape=(options.hidden,)))
-    decoder.add(LSTM(lstm_hidden, return_sequences=True))
-    decoder.add(TimeDistributed(Dense(top_words)))
-
-    decoder.summary()
+    encoderx = Model(input, (zmean, zlsigma))
 
     input = Input(shape=(slength, ))
-    h = encoder(input)
-    h = KLLayer()(h) # computes the KL loss and stores it for later
-    h = Sample()(h)  # implements the reparam trick
-    out = decoder(h)
+    h = Embedding(top_words, embedding_length, input_length=slength)(input)
+    h = Bidirectional(LSTM(lstm_hidden))(h)
+    zmean = Dense(options.hidden)(h)
+    zlsigma = Dense(options.hidden)(h)
 
-    auto = Model(input, out)
+    encodery = Model(input, (zmean, zlsigma))
+
+    decoderx = Sequential()
+    decoderx.add(RepeatVector(slength, input_shape=(options.hidden,)))
+    decoderx.add(LSTM(lstm_hidden, return_sequences=True))
+    decoderx.add(TimeDistributed(Dense(top_words)))
+
+    decodery = Sequential()
+    decodery.add(RepeatVector(slength, input_shape=(options.hidden,)))
+    decodery.add(LSTM(lstm_hidden, return_sequences=True))
+    decodery.add(TimeDistributed(Dense(top_words)))
+
+    inputx = Input(shape=(slength, ))
+    inputy = Input(shape=(slength, ))
+
+    zx = encoderx(inputx)
+    zx = KLLayer()(zx) # computes the KL loss and stores it for later
+    hxx = Sample()(zx)  # implements the reparam trick
+    outxx = decoderx(hxx)
+
+    hxy = Sample()(zx)
+    outxy = decodery(hxy)
+
+    zy = encodery(inputy)
+    zy = KLLayer()(zy) # computes the KL loss and stores it for later
+    hyx = Sample()(zy)  # implements the reparam trick
+    outyx = decoderx(hyx)
+
+    hyy = Sample()(zy)
+    outyy = decodery(hyy)
+
+
+    auto = Model((inputx, inputy), (outxx, outxy, outyx, outyy))
 
     auto.summary()
 
@@ -177,8 +199,12 @@ def go(options):
     auto.compile(opt, keras.losses.sparse_categorical_crossentropy)
 
     epochs = 0
+
+    xr = x[:, :, None]
+    yr = y[:, :, None]
+
     while epochs < options.epochs:
-        auto.fit(x, x[:, :, None],
+        auto.fit((x, y), (xr, yr, xr, yr),
                 epochs=options.out_every,
                 batch_size=options.batch,
                 validation_split=1/6,
@@ -203,11 +229,6 @@ if __name__ == "__main__":
                         dest="epochs",
                         help="Number of epochs.",
                         default=150, type=int)
-
-    parser.add_argument("-E", "--embedding-size",
-                        dest="embedding_size",
-                        help="Size of the word embeddings on the input layer.",
-                        default=300, type=int)
 
     parser.add_argument("-o", "--output-every",
                         dest="out_every",
@@ -238,7 +259,7 @@ if __name__ == "__main__":
     parser.add_argument("-H", "--hidden-size",
                         dest="hidden",
                         help="Latent vector size",
-                        default=16, type=int)
+                        default=64, type=int)
 
     parser.add_argument("-L", "--lstm-hidden-size",
                         dest="lstm_capacity",
@@ -254,7 +275,7 @@ if __name__ == "__main__":
     parser.add_argument("-m", "--max_length",
                         dest="max_length",
                         help="Max length",
-                        default=60, type=int)
+                        default=500, type=int)
 
     parser.add_argument("-w", "--top_words",
                         dest="top_words",
