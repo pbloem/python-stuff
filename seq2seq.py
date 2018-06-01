@@ -35,6 +35,12 @@ import util
 INDEX_FROM = 3
 CHECK = 5
 
+def anneal(step, total, k = 1.0, anneal_function='logistic'):
+        if anneal_function == 'logistic':
+            return float(1/(1+np.exp(-k*(step-total/2))))
+        elif anneal_function == 'linear':
+            return min(1, step/total)
+
 class KLLayer(Layer):
 
     """
@@ -44,8 +50,9 @@ class KLLayer(Layer):
     http://tiao.io/posts/implementing-variational-autoencoders-in-keras-beyond-the-quickstart-tutorial/
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, weight = K.variable(1.0), *args, **kwargs):
         self.is_placeholder = True
+        self.weight = weight
         super().__init__(*args, **kwargs)
 
     def call(self, inputs):
@@ -159,9 +166,11 @@ def go(options):
 
     decoder.summary()
 
+    kl = KLLayer()
+
     input = Input(shape=(slength, ))
     h = encoder(input)
-    h = KLLayer()(h) # computes the KL loss and stores it for later
+    h = kl(h) # computes the KL loss and stores it for later
     h = Sample()(h)  # implements the reparam trick
     out = decoder(h)
 
@@ -178,6 +187,10 @@ def go(options):
 
     epochs = 0
     while epochs < options.epochs:
+
+        print('Set KL weight to ', anneal(epochs, options.epochs))
+        K.set_value(kl.weight, anneal(epochs, options.epochs))
+
         auto.fit(x, x[:, :, None],
                 epochs=options.out_every,
                 batch_size=options.batch,
