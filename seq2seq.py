@@ -6,7 +6,7 @@ from keras.datasets import imdb
 from keras.models import Sequential, Model
 from keras.layers import \
     Dense, Activation, Conv2D, MaxPool2D, Dropout, Flatten, Input, Reshape, LSTM, Embedding, RepeatVector,\
-    TimeDistributed, Bidirectional
+    TimeDistributed, Bidirectional, Concatenate, Lambda, SpatialDropout1D
 from keras.optimizers import Adam
 from tensorflow.python.client import device_lib
 
@@ -73,7 +73,6 @@ class Sample(Layer):
     Performs sampling step
 
     """
-
     def __init__(self, *args, **kwargs):
         self.is_placeholder = True
         super().__init__(*args, **kwargs)
@@ -151,32 +150,33 @@ def go(options):
     print('Data Loaded. Size ', x.shape)
 
     input = Input(shape=(slength, ))
-    h = Embedding(top_words, options.embedding_size, input_length=slength)(input)
-    print(h)
-    h = Bidirectional(LSTM(lstm_hidden))(h)
+
+    embedding = Embedding(top_words, options.embedding_size, input_length=None)
+
+    embedded = embedding(input)
+    h = Bidirectional(LSTM(lstm_hidden))(embedded)
+
     zmean = Dense(options.hidden)(h)
     zlsigma = Dense(options.hidden)(h)
 
-    encoder = Model(input, (zmean, zlsigma))
-
-    decoder = Sequential()
-    decoder.add(RepeatVector(slength, input_shape=(options.hidden,)))
-    decoder.add(LSTM(lstm_hidden, return_sequences=True))
-    decoder.add(TimeDistributed(Dense(top_words)))
-
-    decoder.summary()
-
     kl = KLLayer()
+    h = kl([zmean, zlsigma]) # computes the KL loss and stores it for later
 
-    input = Input(shape=(slength, ))
-    h = encoder(input)
-    h = kl(h) # computes the KL loss and stores it for later
-    h = Sample()(h)  # implements the reparam trick
-    out = decoder(h)
+    z = Sample()(h)  # implements the reparam trick
 
-    auto = Model(input, out)
+    input_shifted = Input(shape=(slength + 1, ))
+    embedded_shifted = embedding(input_shifted)
 
-    auto.summary()
+    embedded_shifted = SpatialDropout1D(rate=options.dropout)(embedded_shifted)
+
+    zrep = RepeatVector(slength + 1)(z)
+    catted = Concatenate(axis=2)( [zrep, embedded_shifted] )
+
+    h = TimeDistributed(Dense(lstm_hidden))(catted)
+    h = LSTM(lstm_hidden, return_sequences=True)(h)
+    out = TimeDistributed(Dense(top_words))(h)
+
+    auto = Model([input, input_shifted], out)
 
     if options.num_gpu is not None:
         auto = multi_gpu_model(auto, gpus=options.num_gpu)
@@ -185,13 +185,19 @@ def go(options):
 
     auto.compile(opt, keras.losses.sparse_categorical_crossentropy)
 
+    x = x + 1
+    n = x.shape[0]
+
+    x_shifted = np.concatenate([np.zeros((n, 1)), x], axis=1)
+    x_out = np.concatenate([x, np.zeros((n, 1))], axis=1)[:, :, None]
+
     epochs = 0
     while epochs < options.epochs:
 
         print('Set KL weight to ', anneal(epochs, options.epochs))
         K.set_value(kl.weight, anneal(epochs, options.epochs))
 
-        auto.fit(x, x[:, :, None],
+        auto.fit([x, x_shifted], x_out,
                 epochs=options.out_every,
                 batch_size=options.batch,
                 validation_split=1/6,
@@ -247,6 +253,11 @@ if __name__ == "__main__":
                         dest="data_dir",
                         help="Data directory",
                         default='./data', type=str)
+
+    parser.add_argument("-d", "--dropout-rate",
+                        dest="dropout",
+                        help="The word dropout rate used when training the decoder",
+                        default=0.5, type=float)
 
     parser.add_argument("-H", "--hidden-size",
                         dest="hidden",
