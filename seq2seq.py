@@ -143,6 +143,7 @@ def go(options):
         decode = decode_imdb
 
     print('Data Loaded. Size ', x.shape)
+    print(len(x_ix_to_word), 'distinct words')
 
     print(x.shape[0], ' sentences loaded')
     for i in range(3):
