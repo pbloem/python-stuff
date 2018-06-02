@@ -5,8 +5,9 @@ from keras.layers.recurrent import LSTM
 from keras.optimizers import Adam, RMSprop
 from nltk import FreqDist
 import numpy as np
-import os
+import os, sys
 import datetime
+
 
 """
 
@@ -15,7 +16,7 @@ BAsed on https://github.com/ChunML/seq2seq/blob/master/seq2seq_utils.py
 
 """
 
-# Sentence limit. Useful for debugging
+# Character limit. Useful for debugging
 LIMIT = None
 
 def load_data(source, dist, max_len=100, vocab_size=10000):
@@ -35,7 +36,7 @@ def load_data(source, dist, max_len=100, vocab_size=10000):
         y_data = y_data[:LIMIT]
 
     # Splitting raw text into array of sequences
-    X = [text_to_word_sequence(x)[::-1] for x, y in zip(X_data.split('\n'), y_data.split('\n')) if len(x) > 0 and len(y) > 0 and len(x) <= max_len and len(y) <= max_len]
+    X = [text_to_word_sequence(x) for x, y in zip(X_data.split('\n'), y_data.split('\n')) if len(x) > 0 and len(y) > 0 and len(x) <= max_len and len(y) <= max_len]
     y = [text_to_word_sequence(y) for x, y in zip(X_data.split('\n'), y_data.split('\n')) if len(x) > 0 and len(y) > 0 and len(x) <= max_len and len(y) <= max_len]
 
     # Creating the vocabulary set with the most common words (leaving room for PAD, START, UNK)
@@ -47,12 +48,15 @@ def load_data(source, dist, max_len=100, vocab_size=10000):
     # Creating an array of words from the vocabulary set, we will use this array as index-to-word dictionary
     X_ix_to_word = [word[0] for word in X_vocab]
     # Adding the word "ZERO" to the beginning of the array
-    X_ix_to_word.insert(0, '<PAD>')
-    X_ix_to_word.insert(1, '<START>')
-    X_ix_to_word.insert(2, '<UNK>')
+    X_ix_to_word = ['<PAD>', '<START>', '<UNK>'] + X_ix_to_word
 
     # Creating the word-to-index dictionary from the array created above
     X_word_to_ix = {word:ix for ix, word in enumerate(X_ix_to_word)}
+
+    # print(X_word_to_ix['<PAD>'])
+    # print(X_word_to_ix['the'])
+    # print(X_word_to_ix['session'])
+    # print(X_word_to_ix['resumption'])
 
     # Converting each word to its index value
     for i, sentence in enumerate(X):
@@ -62,11 +66,11 @@ def load_data(source, dist, max_len=100, vocab_size=10000):
             else:
                 X[i][j] = X_word_to_ix['<UNK>']
 
-    y_ix_to_word = [word[0] for word in y_vocab]
+    # for s in range(3):
+    #     print('___ ', ' '.join(X_ix_to_word[id] for id in X[s]))
 
-    X_ix_to_word.insert(0, '<PAD>')
-    y_ix_to_word.insert(1, '<START>')
-    y_ix_to_word.insert(2, '<UNK>')
+    y_ix_to_word = [word[0] for word in y_vocab]
+    y_ix_to_word = ['<PAD>', '<START>', '<UNK>'] + y_ix_to_word
 
     y_word_to_ix = {word:ix for ix, word in enumerate(y_ix_to_word)}
 

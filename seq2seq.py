@@ -120,10 +120,6 @@ def go(options):
         x, x_vocab_len, x_word_to_ix, x_ix_to_word, y, y_vocab_len, y_word_to_ix, y_ix_to_word = \
             util.load_data(dir+os.sep+'europarl-v8.fi-en.en', dir+os.sep+'europarl-v8.fi-en.fi', vocab_size=top_words, max_len=10000)
 
-        print(len(x), ' sentences loaded')
-        print(len(x_ix_to_word), ' distinct words')
-        print(x[:5])
-
         # Finding the length of the longest sequence
         x_max_len = max([len(sentence) for sentence in x])
         y_max_len = max([len(sentence) for sentence in y])
@@ -147,6 +143,11 @@ def go(options):
         decode = decode_imdb
 
     print('Data Loaded. Size ', x.shape)
+
+    print(x.shape[0], ' sentences loaded')
+    for i in range(3):
+        print(x[i, :])
+        print(decode(x[i, :]))
 
     input = Input(shape=(slength, ))
 
