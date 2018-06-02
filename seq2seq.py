@@ -206,7 +206,7 @@ def go(options):
 
         sub    = x[:CHECK, :]
         sub_sh = x_shifted[:CHECK, :]
-        out = auto.predict(sub, sub_sh)
+        out = auto.predict([sub, sub_sh])
         y = np.argmax(out, axis=-1)
 
         for i in range(CHECK):
