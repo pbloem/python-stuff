@@ -134,8 +134,6 @@ def go(options):
         x = sequence.pad_sequences(x, maxlen=slength, dtype='int32', padding='post', truncating='post')
         y = sequence.pad_sequences(y, maxlen=slength, dtype='int32', padding='post', truncating='post')
 
-        print(x[:5, :])
-
         def decode(seq):
             return ' '.join(x_ix_to_word[id] for id in seq)
 
@@ -143,7 +141,8 @@ def go(options):
         # Load only training sequences
         (x, _), _ = imdb.load_data(num_words=top_words)
 
-        x = sequence.pad_sequences(x, maxlen=slength, padding='post', truncating='post')
+        x = sequence.pad_sequences(x, maxlen=slength+1, padding='post', truncating='post')
+        x = x[:, 1:] # rm start symbol
 
         decode = decode_imdb
 
@@ -185,11 +184,9 @@ def go(options):
 
     auto.compile(opt, keras.losses.sparse_categorical_crossentropy)
 
-    x = x + 1
     n = x.shape[0]
-
-    x_shifted = np.concatenate([np.zeros((n, 1)), x], axis=1)
-    x_out = np.concatenate([x, np.zeros((n, 1))], axis=1)[:, :, None]
+    x_shifted = np.concatenate([np.ones((n, 1)), x], axis=1)            # prepend start symbol
+    x_out = np.concatenate([x, np.zeros((n, 1))], axis=1)[:, :, None]   # append pad symbol
 
     epochs = 0
     while epochs < options.epochs:
