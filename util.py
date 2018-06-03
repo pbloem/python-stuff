@@ -93,7 +93,7 @@ def process_data(word_sentences, max_len, word_to_ix):
     return sequences
 
 
-def batch_pad(x, batch_size):
+def batch_pad(x, batch_size, min_length=3):
     """
     Takes a list of integer sequences, sorts them by lengths and pads them so that sentences in each batch have the
     same length.
@@ -114,10 +114,10 @@ def batch_pad(x, batch_size):
         batch = x[start:end]
 
         mlen = max([len(l) for l in batch])
+        if mlen >= min_length:
+            batch = sequence.pad_sequences(batch, maxlen=mlen, dtype='int32', padding='post', truncating='post')
 
-        batch = sequence.pad_sequences(batch, maxlen=mlen, dtype='int32', padding='post', truncating='post')
-
-        batches.append(batch)
+            batches.append(batch)
 
         start += batch_size
 
