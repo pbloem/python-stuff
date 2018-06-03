@@ -12,15 +12,14 @@ from keras.preprocessing import sequence
 
 """
 
-
-BAsed on https://github.com/ChunML/seq2seq/blob/master/seq2seq_utils.py
+Based on https://github.com/ChunML/seq2seq/blob/master/seq2seq_utils.py
 
 """
 
 # Character limit. Useful for debugging
 LIMIT = None
 
-def load_data(source, dist, max_len=100, vocab_size=10000):
+def load_data(source, dist, vocab_size=10000):
 
     # Reading raw text from source and destination files
     f = open(source, 'r')
@@ -37,8 +36,8 @@ def load_data(source, dist, max_len=100, vocab_size=10000):
         y_data = y_data[:LIMIT]
 
     # Splitting raw text into array of sequences
-    X = [text_to_word_sequence(x) for x, y in zip(X_data.split('\n'), y_data.split('\n')) if len(x) > 0 and len(y) > 0 and len(x) <= max_len and len(y) <= max_len]
-    y = [text_to_word_sequence(y) for x, y in zip(X_data.split('\n'), y_data.split('\n')) if len(x) > 0 and len(y) > 0 and len(x) <= max_len and len(y) <= max_len]
+    X = [text_to_word_sequence(x) for x, y in zip(X_data.split('\n'), y_data.split('\n')) if len(x) > 0 and len(y) > 0 ]
+    y = [text_to_word_sequence(y) for x, y in zip(X_data.split('\n'), y_data.split('\n')) if len(x) > 0 and len(y) > 0 ]
 
     # Creating the vocabulary set with the most common words (leaving room for PAD, START, UNK)
     dist = FreqDist(np.hstack(X))

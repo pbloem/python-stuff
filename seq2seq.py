@@ -118,21 +118,23 @@ def go(options):
     if options.task == 'europarl':
 
         dir = options.data_dir
-        x, x_vocab_len, x_word_to_ix, x_ix_to_word, y, y_vocab_len, y_word_to_ix, y_ix_to_word = \
-            util.load_data(dir+os.sep+'europarl-v8.fi-en.en', dir+os.sep+'europarl-v8.fi-en.fi', vocab_size=top_words, max_len=10000)
+        x, x_vocab_len, x_word_to_ix, x_ix_to_word, _, _, _, _ = \
+            util.load_data(dir+os.sep+'europarl-v8.fi-en.en', dir+os.sep+'europarl-v8.fi-en.fi', vocab_size=top_words)
 
         # Finding the length of the longest sequence
         x_max_len = max([len(sentence) for sentence in x])
-        y_max_len = max([len(sentence) for sentence in y])
 
         print('max sequence length ', x_max_len)
         print(len(x_ix_to_word), 'distinct words')
 
+        x = util.batch_pad(x, options.batch)
+
         # Padding zeros to make all sequences have a same length with the longest one
-        x = sequence.pad_sequences(x, maxlen=slength, dtype='int32', padding='post', truncating='post')
-        y = sequence.pad_sequences(y, maxlen=slength, dtype='int32', padding='post', truncating='post')
+        # x = sequence.pad_sequences(x, maxlen=slength, dtype='int32', padding='post', truncating='post')
+        # y = sequence.pad_sequences(y, maxlen=slength, dtype='int32', padding='post', truncating='post')
 
         def decode(seq):
+            print(seq)
             return ' '.join(x_ix_to_word[id] for id in seq)
 
     else:
