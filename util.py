@@ -7,6 +7,7 @@ from nltk import FreqDist
 import numpy as np
 import os, sys
 import datetime
+from keras.preprocessing import sequence
 
 
 """
@@ -91,4 +92,38 @@ def process_data(word_sentences, max_len, word_to_ix):
         for j, word in enumerate(sentence):
             sequences[i, j, word] = 1.
     return sequences
+
+
+def batch_pad(x, batch_size):
+    """
+    Takes a list of integer sequences, sorts them by lengths and pads them so that sentences in each batch have the
+    same length.
+
+    :param x:
+    :return: A list of tensors containing equal-length sequences padded to the length of the longest sequence in the batch
+    """
+
+    x = sorted(x, key=lambda l : len(l))
+    batches = []
+
+    start = 0
+    while start < len(x):
+        end = start + batch_size
+        if end > len(x):
+            end = len(x)
+
+        batch = x[start:end]
+
+        mlen = max([len(l) for l in batch])
+
+        batch = sequence.pad_sequences(batch, maxlen=mlen, dtype='int32', padding='post', truncating='post')
+
+        batches.append(batch)
+
+        start += batch_size
+
+
+    print('max length per batch: ', [max([len(l) for l in batch]) for batch in batches])
+    return batches
+
 

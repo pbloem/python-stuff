@@ -16,6 +16,7 @@ import tensorflow as tf
 
 from sklearn import datasets
 
+from tqdm import tqdm
 import math, sys, os
 import numpy as np
 
@@ -138,19 +139,27 @@ def go(options):
         # Load only training sequences
         (x, _), _ = imdb.load_data(num_words=top_words)
 
-        x = sequence.pad_sequences(x, maxlen=slength+1, padding='post', truncating='post')
-        x = x[:, 1:] # rm start symbol
+        # rm start symbol
+        x = [l[1:] for l in x]
+
+        # x = sequence.pad_sequences(x, maxlen=slength+1, padding='post', truncating='post')
+        # x = x[:, 1:] # rm start symbol
+
+        x = util.batch_pad(x, options.batch)
 
         decode = decode_imdb
 
-    print('Data Loaded. Size ', x.shape)
+    print('Data Loaded.')
 
-    print(x.shape[0], ' sentences loaded')
-    for i in range(3):
-        print(x[i, :])
-        print(decode(x[i, :]))
+    print(sum([b.shape[0] for b in x]), ' sentences loaded')
 
-    input = Input(shape=(slength, ))
+    # for i in range(3):
+    #     print(x[i, :])
+    #     print(decode(x[i, :]))
+
+
+    ## Define model
+    input = Input(shape=(None, ))
 
     embedding = Embedding(top_words, options.embedding_size, input_length=None)
 
@@ -167,7 +176,7 @@ def go(options):
 
     z_exp = Dense(lstm_hidden)(z)
 
-    input_shifted = Input(shape=(slength + 1, ))
+    input_shifted = Input(shape=(None, ))
     embedded_shifted = embedding(input_shifted)
 
     embedded_shifted = SpatialDropout1D(rate=options.dropout)(embedded_shifted)
@@ -189,25 +198,27 @@ def go(options):
 
     auto.compile(opt, keras.losses.sparse_categorical_crossentropy)
 
-    n = x.shape[0]
-    x_shifted = np.concatenate([np.ones((n, 1)), x], axis=1)            # prepend start symbol
-    x_out = np.concatenate([x, np.zeros((n, 1))], axis=1)[:, :, None]   # append pad symbol
-
     epochs = 0
     while epochs < options.epochs:
 
         print('Set KL weight to ', anneal(epochs, options.epochs))
         K.set_value(kl.weight, anneal(epochs, options.epochs))
 
-        auto.fit([x, x_shifted], x_out,
-                epochs=options.out_every,
-                batch_size=options.batch,
-                validation_split=1/6,
-                shuffle=True)
+        for batch in tqdm(x):
+            n = batch.shape[0]
+            batch_shifted = np.concatenate([np.ones((n, 1)), batch], axis=1)  # prepend start symbol
+            batch_out = np.concatenate([batch, np.zeros((n, 1))], axis=1)[:, :, None]  # append pad symbol
+
+            auto.train_on_batch([batch, batch_shifted], batch_out)
+
         epochs += options.out_every
 
-        sub    = x[:CHECK, :]
-        sub_sh = x_shifted[:CHECK, :]
+        # show reconstructions for some sentences from batch 90
+        b = x[90]
+        b_shifted = np.concatenate([np.ones((n, 1)), b], axis=1)  # prepend start symbol
+
+        sub    = b[:CHECK, :]
+        sub_sh = b_shifted[:CHECK, :]
         out = auto.predict([sub, sub_sh])
         y = np.argmax(out, axis=-1)
 
@@ -281,7 +292,7 @@ if __name__ == "__main__":
     parser.add_argument("-m", "--max_length",
                         dest="max_length",
                         help="Max length",
-                        default=60, type=int)
+                        default=None, type=int)
 
     parser.add_argument("-w", "--top_words",
                         dest="top_words",
