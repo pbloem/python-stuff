@@ -125,6 +125,7 @@ def go(options):
         y_max_len = max([len(sentence) for sentence in y])
 
         print('max sequence length ', x_max_len)
+        print(len(x_ix_to_word), 'distinct words')
 
         # Padding zeros to make all sequences have a same length with the longest one
         x = sequence.pad_sequences(x, maxlen=slength, dtype='int32', padding='post', truncating='post')
@@ -143,7 +144,6 @@ def go(options):
         decode = decode_imdb
 
     print('Data Loaded. Size ', x.shape)
-    print(len(x_ix_to_word), 'distinct words')
 
     print(x.shape[0], ' sentences loaded')
     for i in range(3):
@@ -165,16 +165,19 @@ def go(options):
 
     z = Sample()(h)  # implements the reparam trick
 
+    z_exp = Dense(lstm_hidden)(z)
+
     input_shifted = Input(shape=(slength + 1, ))
     embedded_shifted = embedding(input_shifted)
 
     embedded_shifted = SpatialDropout1D(rate=options.dropout)(embedded_shifted)
 
-    zrep = RepeatVector(slength + 1)(z)
-    catted = Concatenate(axis=2)( [zrep, embedded_shifted] )
+    # zrep = RepeatVector(slength + 1)(z)
+    # catted = Concatenate(axis=2)( [zrep, embedded_shifted] )
 
-    h = TimeDistributed(Dense(lstm_hidden))(catted)
-    h = LSTM(lstm_hidden, return_sequences=True)(h)
+    h = TimeDistributed(Dense(lstm_hidden))(embedded_shifted)
+    h = LSTM(lstm_hidden, return_sequences=True)(h, initial_state=[z_exp, z_exp])
+
     out = TimeDistributed(Dense(top_words))(h)
 
     auto = Model([input, input_shifted], out)
