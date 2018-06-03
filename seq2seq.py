@@ -215,14 +215,13 @@ def go(options):
 
         # show reconstructions for some sentences from batch 90
         b = x[90]
+        n = b.shape[0]
         b_shifted = np.concatenate([np.ones((n, 1)), b], axis=1)  # prepend start symbol
 
-        sub    = b[:CHECK, :]
-        sub_sh = b_shifted[:CHECK, :]
-        out = auto.predict([sub, sub_sh])
+        out = auto.predict([b, b_shifted])
         y = np.argmax(out, axis=-1)
 
-        for i in range(CHECK):
+        for i in range(b.shape[0]):
             print('in   ',  decode(x[i, :]))
             print('out   ', decode(y[i, :]))
             print()
