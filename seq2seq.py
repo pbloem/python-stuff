@@ -222,7 +222,7 @@ def go(options):
         y = np.argmax(out, axis=-1)
 
         for i in range(b.shape[0]):
-            print('in   ',  decode(x[i, :]))
+            print('in   ',  decode(b[i, :]))
             print('out   ', decode(y[i, :]))
             print()
 
