@@ -153,8 +153,9 @@ def decode_imdb(seq):
     return ' '.join(id_to_word[id] for id in seq)
 
 def sparse_loss(y_true, y_pred):
-    return tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y_true,
-                                                          logits=y_pred)
+    return K.sparse_categorical_crossentropy(y_true, y_pred, from_logits=True)
+    #return tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y_true,
+    #                                                      logits=y_pred)
 def go(options):
     slength = options.max_length
     top_words = options.top_words
