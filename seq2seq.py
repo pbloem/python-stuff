@@ -274,8 +274,12 @@ def go(options):
         stateful_lstm.build((1, 60, lstm_hidden))
         stateful_lstm.set_weights(decoder_lstm.get_weights())
 
+        nwembedding = Embedding(top_words, options.embedding_size, input_length=None, batch_input_shape=(1, None))
+        nwembedding.build((1, None))
+        nwembedding.set_weights(embedding.get_weights())
+
         generator_model = Sequential([
-            embedding,
+            nwembedding,
             tohidden,
             stateful_lstm,
             fromhidden,
