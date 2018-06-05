@@ -251,7 +251,7 @@ def go(options):
 
     opt = keras.optimizers.Adam(lr=options.lr)
 
-    auto.compile(opt, keras.losses.sparse_categorical_crossentropy)
+    auto.compile(opt, sparse_loss)
 
     epochs = 0
     while epochs < options.epochs:
