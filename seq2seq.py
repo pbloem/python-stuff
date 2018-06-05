@@ -17,7 +17,7 @@ import tensorflow as tf
 from sklearn import datasets
 
 from tqdm import tqdm
-import math, sys, os
+import math, sys, os, random
 import numpy as np
 
 import matplotlib
@@ -68,6 +68,9 @@ class KLLayer(Layer):
 
         return inputs
 
+def s(layer):
+    return Sequential([layer])
+
 class Sample(Layer):
 
     """
@@ -91,6 +94,51 @@ class Sample(Layer):
     def compute_output_shape(self, input_shape):
         shape_mu, _ = input_shape
         return shape_mu
+
+
+def sample(preds, temperature=1.0):
+    """
+    Sample an index from a probability vector
+
+    :param preds:
+    :param temperature:
+    :return:
+    """
+
+    # helper function to sample an index from a probability array
+    preds = np.asarray(preds).astype('float64')
+    preds = np.log(preds) / temperature
+
+    exp_preds = np.exp(preds)
+    preds = exp_preds / np.sum(exp_preds)
+
+    probas = np.random.multinomial(1, preds, 1)
+
+    return np.argmax(probas)
+
+def generate_seq(
+        model : Sequential,
+        lstm : LSTM,
+        sos, z, size):
+
+    lstm.reset_states([z, z])
+
+    last_token = sos
+
+    tokens = [last_token]
+
+    # generate a fixed number of words
+    for _ in range(size):
+
+        next_probs = model.predict(np.asarray([[last_token]]))
+        print(next_probs.shape, next_probs)
+        next_token = sample(next_probs[0, 0, :])
+
+        tokens.append(next_token)
+
+        last_token = next_token
+
+    return tokens
 
 
 def decode_imdb(seq):
@@ -176,7 +224,8 @@ def go(options):
 
     z = Sample()(h)  # implements the reparam trick
 
-    z_exp = Dense(lstm_hidden)(z)
+    latenttohidden = Dense(lstm_hidden, input_shape=(options.hidden,))
+    z_exp = latenttohidden(z)
 
     input_shifted = Input(shape=(None, ))
     embedded_shifted = embedding(input_shifted)
@@ -186,11 +235,16 @@ def go(options):
     # zrep = RepeatVector(slength + 1)(z)
     # catted = Concatenate(axis=2)( [zrep, embedded_shifted] )
 
-    h = TimeDistributed(Dense(lstm_hidden))(embedded_shifted)
-    h = LSTM(lstm_hidden, return_sequences=True)(h, initial_state=[z_exp, z_exp])
+    tohidden   = Dense(lstm_hidden)
+    fromhidden = Dense(top_words)
+    decoder_lstm = LSTM(lstm_hidden, return_sequences=True)
 
-    out = TimeDistributed(Dense(top_words))(h)
+    h = TimeDistributed(tohidden)(embedded_shifted)
+    h = decoder_lstm(h, initial_state=[z_exp, z_exp])
 
+    out = TimeDistributed(fromhidden)(h)
+
+    encoder = Model(input, [zmean, zlsigma])
     auto = Model([input, input_shifted], out)
 
     if options.num_gpu is not None:
@@ -215,17 +269,35 @@ def go(options):
 
         epochs += options.out_every
 
-        # show reconstructions for some sentences from batch 90
-        b = x[90]
-        n = b.shape[0]
-        b_shifted = np.concatenate([np.ones((n, 1)), b], axis=1)  # prepend start symbol
+        # Copy the decoder LSTM to a stateful one
+        stateful_lstm = LSTM(lstm_hidden, input_dim=lstm_hidden, input_length=60, batch_size=1, stateful=True, return_sequences=True)
+        stateful_lstm.build((1, 60, lstm_hidden))
+        stateful_lstm.set_weights(decoder_lstm.get_weights())
 
-        out = auto.predict([b, b_shifted])
-        y = np.argmax(out, axis=-1)
+        generator_model = Sequential([
+            embedding,
+            tohidden,
+            stateful_lstm,
+            fromhidden,
+        ])
 
-        for i in range(b.shape[0]):
-            print('in   ',  decode(b[i, :]))
-            print('out   ', decode(y[i, :]))
+        # show samples for some sentences from random batches
+        for i in range(CHECK):
+            b = random.choice(x)
+
+            n = b.shape[0]
+            b_shifted = np.concatenate([np.ones((n, 1)), b], axis=1)  # prepend start symbol
+
+            z, _ = encoder.predict(b)
+            print(z.shape)
+            z = z[None, 0, :]
+            print(z.shape)
+
+            z = Sequential([latenttohidden]).predict(z)
+            gen = generate_seq(generator_model, stateful_lstm, 1, z, 60)
+
+            print('in   ',  decode(b[0, :]))
+            print('out   ', decode(gen))
             print()
 
 if __name__ == "__main__":
