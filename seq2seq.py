@@ -6,7 +6,7 @@ from keras.datasets import imdb
 from keras.models import Sequential, Model
 from keras.layers import \
     Dense, Activation, Conv2D, MaxPool2D, Dropout, Flatten, Input, Reshape, LSTM, Embedding, RepeatVector,\
-    TimeDistributed, Bidirectional, Concatenate, Lambda, SpatialDropout1D
+    TimeDistributed, Bidirectional, Concatenate, Lambda, SpatialDropout1D, Softmax
 from keras.optimizers import Adam
 from tensorflow.python.client import device_lib
 
@@ -131,7 +131,6 @@ def generate_seq(
     for _ in range(size):
 
         next_probs = model.predict(np.asarray([[last_token]]))
-        print(next_probs.shape, next_probs)
         next_token = sample(next_probs[0, 0, :])
 
         tokens.append(next_token)
@@ -283,6 +282,7 @@ def go(options):
             tohidden,
             stateful_lstm,
             fromhidden,
+            Softmax()
         ])
 
         # show samples for some sentences from random batches
@@ -293,9 +293,7 @@ def go(options):
             b_shifted = np.concatenate([np.ones((n, 1)), b], axis=1)  # prepend start symbol
 
             z, _ = encoder.predict(b)
-            print(z.shape)
             z = z[None, 0, :]
-            print(z.shape)
 
             z = Sequential([latenttohidden]).predict(z)
             gen = generate_seq(generator_model, stateful_lstm, 1, z, 60)
