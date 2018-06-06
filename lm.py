@@ -59,38 +59,25 @@ def sample(preds, temperature=1.0):
 def generate_seq(
         model : Sequential,
         lstm : LSTM,
-        sos, size):
+        seed, size):
 
     lstm.reset_states()
 
-    last_token = sos
+    tokens = []
 
-    tokens = [last_token]
+    for s in seed:
+        model.predict(np.asarray([[s]]))
+        tokens.append(s)
 
     # generate a fixed number of words
     for _ in range(size):
 
-        next_probs = model.predict(np.asarray([[last_token]]))
+        next_probs = model.predict(np.asarray([[tokens[-1]]]))
         next_token = sample(next_probs[0, 0, :])
 
         tokens.append(next_token)
 
-        last_token = next_token
-
     return tokens
-
-
-def decode_imdb(seq):
-
-    word_to_id = keras.datasets.imdb.get_word_index()
-    word_to_id = {k: (v + INDEX_FROM) for k, v in word_to_id.items()}
-    word_to_id["<PAD>"] = 0
-    word_to_id["<START>"] = 1
-    word_to_id["<UNK>"] = 2
-
-    id_to_word = {value: key for key, value in word_to_id.items()}
-
-    return ' '.join(id_to_word[id] for id in seq)
 
 def sparse_loss(y_true, y_pred):
     return K.sparse_categorical_crossentropy(y_true, y_pred, from_logits=True)
@@ -136,7 +123,18 @@ def go(options):
 
         x = util.batch_pad(x, options.batch)
 
-        decode = decode_imdb
+        word_to_id = keras.datasets.imdb.get_word_index()
+        word_to_id = {k: (v + INDEX_FROM) for k, v in word_to_id.items()}
+        word_to_id["<PAD>"] = 0
+        word_to_id["<START>"] = 1
+        word_to_id["<UNK>"] = 2
+        word_to_id["???"] = 3
+
+        id_to_word = {value: key for key, value in word_to_id.items()}
+
+        def decode(seq):
+            return ' '.join(id_to_word[id] for id in seq)
+
 
     print('Data Loaded.')
 
@@ -201,12 +199,18 @@ def go(options):
         for i in range(CHECK):
             b = random.choice(x)
 
-            n = b.shape[0]
-            b_shifted = np.concatenate([np.ones((n, 1)), b], axis=1)  # prepend start symbol
+            if b.shape[1] > 20:
+                seed = b[0,:20]
+            else:
+                seed = b[0, :]
 
-            gen = generate_seq(generator_model, stateful_lstm, 1, 60)
+            print(seed)
+            seed = np.insert(seed, 0, 1)
+            print(seed)
 
-            print('in   ',  decode(b[0, :]))
+            gen = generate_seq(generator_model, stateful_lstm, seed,  60)
+
+            print('seed  ', decode(seed))
             print('out   ', decode(gen))
             print()
 
