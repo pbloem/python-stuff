@@ -94,7 +94,7 @@ def go(options):
 
         dir = options.data_dir
         x, numchars, char_to_ix, ix_to_char = \
-            util.load_char_data(dir+os.sep+'europarl-v8.fi-en.en', length=options.sequence_length)
+            util.load_char_data(dir+os.sep+'europarl-v8.fi-en.en', limit=options.limit, length=options.sequence_length)
 
         x_max_len = max([len(sentence) for sentence in x])
 
@@ -220,6 +220,11 @@ if __name__ == "__main__":
     parser.add_argument("-m", "--sequence_length",
                         dest="sequence_length",
                         help="Sequence length",
+                        default=None, type=int)
+
+    parser.add_argument("-I", "--limit",
+                        dest="limit",
+                        help="Character cap for the corpus",
                         default=None, type=int)
 
     options = parser.parse_args()
