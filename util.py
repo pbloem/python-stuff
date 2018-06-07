@@ -20,6 +20,7 @@ Based on https://github.com/ChunML/seq2seq/blob/master/seq2seq_utils.py
 """
 
 # Character limit. Useful for debugging
+LIMIT = None
 
 def load_data(source, dist, vocab_size=10000):
 
