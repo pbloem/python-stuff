@@ -19,9 +19,7 @@ Based on https://github.com/ChunML/seq2seq/blob/master/seq2seq_utils.py
 
 """
 
-# Character limit. Useful for debugging
-
-def load_data(source, dist, vocab_size=10000):
+def load_data(source, dist, vocab_size=10000, limit=None):
 
     # Reading raw text from source and destination files
     f = open(source, 'r')
@@ -33,9 +31,9 @@ def load_data(source, dist, vocab_size=10000):
 
     print('raw data read')
 
-    if LIMIT is not None:
-        X_data = X_data[:LIMIT]
-        y_data = y_data[:LIMIT]
+    if limit is not None:
+        X_data = X_data[:limit]
+        y_data = y_data[:limit]
 
     # Splitting raw text into array of sequences
     X = [text_to_word_sequence(x) for x, y in zip(X_data.split('\n'), y_data.split('\n')) if len(x) > 0 and len(y) > 0 ]

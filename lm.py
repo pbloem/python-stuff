@@ -61,23 +61,23 @@ def generate_seq(
         lstm : LSTM,
         seed, size):
 
-    lstm.reset_states()
+    ls = seed.shape[0]
 
-    tokens = []
+    # Due to the way Keras RNNs work, we feed the model the
+    # whole sequence each time, constantly sampling the nect character.
+    # It's a little bit inefficient, but that doesn't matter much when generating
 
-    for s in seed:
-        model.predict(np.asarray([[s]]))
-        tokens.append(s)
+    tokens = np.concatenate([seed, np.zeros(size - ls)])
 
-    # generate a fixed number of words
-    for _ in range(size):
+    for i in range(ls, size-1):
 
-        next_probs = model.predict(np.asarray([[tokens[-1]]]))
-        next_token = sample(next_probs[0, 0, :])
+        probs = model.predict(tokens[None,:])
+        # Extract the i-th probability vector and sample an index from it
+        next_token = sample(probs[0, i, :])
 
-        tokens.append(next_token)
+        tokens[i+1] = next_token
 
-    return tokens
+    return [int(t) for t in tokens]
 
 def sparse_loss(y_true, y_pred):
     return K.sparse_categorical_crossentropy(y_true, y_pred, from_logits=True)
@@ -93,7 +93,7 @@ def go(options):
 
         dir = options.data_dir
         x, x_vocab_len, x_word_to_ix, x_ix_to_word, _, _, _, _ = \
-            util.load_data(dir+os.sep+'europarl-v8.fi-en.en', dir+os.sep+'europarl-v8.fi-en.fi', vocab_size=top_words)
+            util.load_data(dir+os.sep+'europarl-v8.fi-en.en', dir+os.sep+'europarl-v8.fi-en.fi', vocab_size=top_words, limit=options.limit)
 
         # Finding the length of the longest sequence
         x_max_len = max([len(sentence) for sentence in x])
@@ -142,19 +142,18 @@ def go(options):
 
 
     ## Define model
-    input_shifted = Input(shape=(None, ))
+    input = Input(shape=(None, ))
     embedding = Embedding(top_words, lstm_hidden, input_length=None)
 
-    embedded_shifted = embedding(input_shifted)
+    embedded = embedding(input)
 
     decoder_lstm = LSTM(lstm_hidden, return_sequences=True)
+    h = decoder_lstm(embedded)
+
     fromhidden = Dense(top_words, activation='softmax')
-
-    h = decoder_lstm(embedded_shifted)
-
     out = TimeDistributed(fromhidden)(h)
 
-    model = Model(input_shifted, out)
+    model = Model(input, out)
 
     opt = keras.optimizers.Adam(lr=options.lr)
 
@@ -175,21 +174,6 @@ def go(options):
 
         epochs += options.out_every
 
-        # Copy the decoder LSTM to a stateful one
-        stateful_lstm = LSTM(lstm_hidden, input_dim=lstm_hidden, input_length=60, batch_size=1, stateful=True, return_sequences=True)
-        stateful_lstm.build((1, 60, lstm_hidden))
-        stateful_lstm.set_weights(decoder_lstm.get_weights())
-
-        nwembedding = Embedding(top_words, lstm_hidden, input_length=None, batch_input_shape=(1, None))
-        nwembedding.build((1, None))
-        nwembedding.set_weights(embedding.get_weights())
-
-        generator_model = Sequential([
-            nwembedding,
-            stateful_lstm,
-            fromhidden
-        ])
-
         # show samples for some sentences from random batches
         for i in range(CHECK):
             b = random.choice(x)
@@ -200,7 +184,7 @@ def go(options):
                 seed = b[0, :]
 
             seed = np.insert(seed, 0, 1)
-            gen = generate_seq(generator_model, stateful_lstm, seed,  60)
+            gen = generate_seq(model, seed,  60)
 
             print('seed   ', decode(seed))
             print('out    ', decode(gen))
@@ -261,6 +245,11 @@ if __name__ == "__main__":
                         dest="top_words",
                         help="Top words",
                         default=10000, type=int)
+
+    parser.add_argument("-I", "--limit",
+                        dest="limit",
+                        help="Character cap for the corpus",
+                        default=None, type=int)
 
     options = parser.parse_args()
 
