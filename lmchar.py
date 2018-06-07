@@ -37,7 +37,7 @@ import util
 INDEX_FROM = 3
 CHECK = 5
 
-def sample(preds, temperature=0.1):
+def sample(preds, temperature=1.):
     """
     Sample an index from a probability vector
 
@@ -57,30 +57,30 @@ def sample(preds, temperature=0.1):
     return np.argmax(probas)
 
 def generate_seq(
-        model : Sequential,
-        lstm : LSTM,
-        seed, numchars, size):
+        model : Model,
+        seed,
+        numchars,
+        size):
 
-    lstm.reset_states()
+    ls = seed.shape[0]
 
-    tokens = []
+    # Due to the way Keras RNNs work, we feed the model the
+    # whole sequence each time, constantly sampling the nect character.
+    # It's a little bit inefficient, but that doesn't matter much when generating
 
-    for s in seed:
+    tokens = np.concatenate([seed, np.zeros(size - ls)])
 
-        soh = util.to_categorical(np.asarray([[s]]), numchars)
-        model.predict(soh)
-        tokens.append(s)
+    for i in range(ls, size-1):
 
-    # generate a fixed number of words
-    for _ in range(size):
+        toh = util.to_categorical(tokens[None,:], numchars)
+        probs = model.predict(toh)
 
-        toh = util.to_categorical(np.asarray([[tokens[-1]]]), numchars)
-        next_probs = model.predict(toh)
-        next_token = sample(next_probs[0, 0, :])
+        # Extract the i-th probability vector and sample an index from it
+        next_token = sample(probs[0, i, :])
 
-        tokens.append(next_token)
+        tokens[i+1] = next_token
 
-    return tokens
+    return [int(t) for t in tokens]
 
 def sparse_loss(y_true, y_pred):
     return K.sparse_categorical_crossentropy(y_true, y_pred, from_logits=True)
@@ -101,7 +101,8 @@ def go(options):
         print('max sequence length ', x_max_len)
         print(len(ix_to_char), ' distinct characters')
 
-        x = util.batch_pad(x, options.batch)
+        # x = util.batch_pad(x, options.batch)
+        x = sequence.pad_sequences(x, x_max_len, padding='post', truncating='post')
 
         def decode(seq):
             return ''.join(ix_to_char[id] for id in seq)
@@ -111,23 +112,20 @@ def go(options):
 
     print('Data Loaded.')
 
-    print(sum([b.shape[0] for b in x]), ' sentences loaded')
-
-    for i in range(3):
-        batch = random.choice(x)
-        print(batch[0, :])
-        print(decode(batch[0, :]))
+    # print(sum([b.shape[0] for b in x]), ' sentences loaded')
+    #
+    # for i in range(3):
+    #     batch = random.choice(x)
+    #     print(batch[0, :])
+    #     print(decode(batch[0, :]))
 
     ## Define model
     input = Input(shape=(None, numchars))
 
-    tohidden   = Dense(lstm_hidden)
-    decoder_lstm = LSTM(lstm_hidden, return_sequences=True)
-    fromhidden = Dense(numchars)
-
-    h = TimeDistributed(tohidden)(input)
-    h = decoder_lstm(h)
-    out = TimeDistributed(fromhidden)(h)
+    h = LSTM(lstm_hidden, return_sequences=True)(input)
+    # h = LSTM(lstm_hidden, return_sequences=True)(h)
+    # h = LSTM(lstm_hidden, return_sequences=True)(h)
+    out = TimeDistributed(Dense(numchars, activation='softmax'))(h)
 
     model = Model(input, out)
 
@@ -137,55 +135,42 @@ def go(options):
     model.summary()
 
     epochs = 0
-    while epochs < options.epochs:
 
-        for batch in tqdm(x):
-            n = batch.shape[0]
+    n = x.shape[0]
 
-            batch_shifted = np.concatenate([np.ones((n, 1)), batch], axis=1)  # prepend start symbol
-            batch_shifted = util.to_categorical(batch_shifted, numchars)
+    x_shifted = np.concatenate([np.ones((n, 1)), x], axis=1)  # prepend start symbol
+    x_shifted = util.to_categorical(x_shifted, numchars)
 
-            batch_out = np.concatenate([batch, np.zeros((n, 1))], axis=1)     # append pad symbol
-            batch_out = util.to_categorical(batch_out, numchars)     # output to one-hots
+    x_out = np.concatenate([x, np.zeros((n, 1))], axis=1)  # append pad symbol
+    x_out = util.to_categorical(x_out, numchars)  # output to one-hots
 
-            model.train_on_batch(batch_shifted, batch_out)
+    # Train the model
+    model.fit(x_shifted, x_out, epochs=options.epochs, batch_size=64)
 
-        epochs += options.out_every
+    # Generate some sentences
+    gen_length = 1
 
-        gen_length = 1
+    # Copy the decoder LSTM to a stateful one
+    # stateful_lstm = LSTM(lstm_hidden, input_dim=lstm_hidden, input_length=gen_length, batch_size=1, stateful=True, return_sequences=True)
+    # stateful_lstm.build((1, gen_length, lstm_hidden))
+    # stateful_lstm.set_weights(decoder_lstm.get_weights())
+    #
+    # tohidden_copy = Dense(lstm_hidden, batch_input_shape=(1, gen_length, numchars))
+    # tohidden_copy.build((1, gen_length, numchars))
+    # tohidden_copy.set_weights(tohidden.get_weights())
 
-        # Copy the decoder LSTM to a stateful one
-        stateful_lstm = LSTM(lstm_hidden, input_dim=lstm_hidden, input_length=gen_length, batch_size=1, stateful=True, return_sequences=True)
-        stateful_lstm.build((1, gen_length, lstm_hidden))
-        stateful_lstm.set_weights(decoder_lstm.get_weights())
+    # show samples for some sentences from random batches
+    for i in range(CHECK):
+        b = random.randint(0, n-1)
 
-        tohidden_copy = Dense(lstm_hidden, batch_input_shape=(1, gen_length, numchars))
-        tohidden_copy.build((1, gen_length, numchars))
-        tohidden_copy.set_weights(tohidden.get_weights())
+        seed = x[b, :20]
+        seed = np.insert(seed, 0, 1)
+        gen = generate_seq(model, seed, numchars, 120)
 
-        generator_model = Sequential([
-            tohidden_copy,
-            stateful_lstm,
-            fromhidden,
-            Softmax()
-        ])
+        print('seed   ', decode(seed))
+        print('out    ', decode(gen))
 
-        # show samples for some sentences from random batches
-        for i in range(CHECK):
-            b = random.choice(x)
-
-            if b.shape[1] > 20:
-                seed = b[0,:20]
-            else:
-                seed = b[0, :]
-
-            seed = np.insert(seed, 0, 1)
-            gen = generate_seq(generator_model, stateful_lstm, seed, numchars, 120)
-
-            print('seed   ', decode(seed))
-            print('out    ', decode(gen))
-
-            print()
+        print()
 
 if __name__ == "__main__":
 

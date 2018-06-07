@@ -147,8 +147,8 @@ def go(options):
 
     embedded_shifted = embedding(input_shifted)
 
-    fromhidden = Dense(top_words)
     decoder_lstm = LSTM(lstm_hidden, return_sequences=True)
+    fromhidden = Dense(top_words, activation='softmax')
 
     h = decoder_lstm(embedded_shifted)
 
@@ -187,8 +187,7 @@ def go(options):
         generator_model = Sequential([
             nwembedding,
             stateful_lstm,
-            fromhidden,
-            Softmax()
+            fromhidden
         ])
 
         # show samples for some sentences from random batches
