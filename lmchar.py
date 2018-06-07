@@ -59,20 +59,23 @@ def sample(preds, temperature=0.1):
 def generate_seq(
         model : Sequential,
         lstm : LSTM,
-        seed, size):
+        seed, numchars, size):
 
     lstm.reset_states()
 
     tokens = []
 
     for s in seed:
-        model.predict(np.asarray([[s]]))
+
+        soh = util.to_categorical(np.asarray([[s]]), numchars)
+        model.predict(soh)
         tokens.append(s)
 
     # generate a fixed number of words
     for _ in range(size):
 
-        next_probs = model.predict(np.asarray([[tokens[-1]]]))
+        toh = util.to_categorical(np.asarray([[tokens[-1]]]), numchars)
+        next_probs = model.predict(toh)
         next_token = sample(next_probs[0, 0, :])
 
         tokens.append(next_token)
@@ -83,8 +86,6 @@ def sparse_loss(y_true, y_pred):
     return K.sparse_categorical_crossentropy(y_true, y_pred, from_logits=True)
 
 def go(options):
-    slength = options.max_length
-    top_words = options.top_words
     lstm_hidden = options.lstm_capacity
 
     print('devices', device_lib.list_local_devices())
@@ -92,69 +93,43 @@ def go(options):
     if options.task == 'europarl':
 
         dir = options.data_dir
-        x, x_vocab_len, x_word_to_ix, x_ix_to_word, _, _, _, _ = \
-            util.load_data(dir+os.sep+'europarl-v8.fi-en.en', dir+os.sep+'europarl-v8.fi-en.fi', vocab_size=top_words)
+        x, numchars, char_to_ix, ix_to_char = \
+            util.load_char_data(dir+os.sep+'europarl-v8.fi-en.en')
 
-        # Finding the length of the longest sequence
         x_max_len = max([len(sentence) for sentence in x])
 
         print('max sequence length ', x_max_len)
-        print(len(x_ix_to_word), 'distinct words')
+        print(len(ix_to_char), ' distinct characters')
 
         x = util.batch_pad(x, options.batch)
 
         def decode(seq):
-            print(seq)
-            return ' '.join(x_ix_to_word[id] for id in seq)
+            return ''.join(ix_to_char[id] for id in seq)
 
     else:
-        # Load only training sequences
-        (x, _), _ = imdb.load_data(num_words=top_words)
-
-        # rm start symbol
-        x = [l[1:] for l in x]
-
-        # x = sequence.pad_sequences(x, maxlen=slength+1, padding='post', truncating='post')
-        # x = x[:, 1:] # rm start symbol
-
-        x = util.batch_pad(x, options.batch)
-
-        word_to_id = keras.datasets.imdb.get_word_index()
-        word_to_id = {k: (v + INDEX_FROM) for k, v in word_to_id.items()}
-        word_to_id["<PAD>"] = 0
-        word_to_id["<START>"] = 1
-        word_to_id["<UNK>"] = 2
-        word_to_id["???"] = 3
-
-        id_to_word = {value: key for key, value in word_to_id.items()}
-
-        def decode(seq):
-            return ' '.join(id_to_word[id] for id in seq)
-
+        raise Exception('Dataset name not recognized.')
 
     print('Data Loaded.')
 
     print(sum([b.shape[0] for b in x]), ' sentences loaded')
 
-    # for i in range(3):
-    #     print(x[i, :])
-    #     print(decode(x[i, :]))
-
+    for i in range(3):
+        batch = random.choice(x)
+        print(batch[0, :])
+        print(decode(batch[0, :]))
 
     ## Define model
-    input_shifted = Input(shape=(None, ))
-    embedding = Embedding(top_words, lstm_hidden, input_length=None)
+    input = Input(shape=(None, numchars))
 
-    embedded_shifted = embedding(input_shifted)
-
-    fromhidden = Dense(top_words)
+    tohidden   = Dense(lstm_hidden)
     decoder_lstm = LSTM(lstm_hidden, return_sequences=True)
+    fromhidden = Dense(numchars)
 
-    h = decoder_lstm(embedded_shifted)
-
+    h = TimeDistributed(tohidden)(input)
+    h = decoder_lstm(h)
     out = TimeDistributed(fromhidden)(h)
 
-    model = Model(input_shifted, out)
+    model = Model(input, out)
 
     opt = keras.optimizers.Adam(lr=options.lr)
 
@@ -168,24 +143,28 @@ def go(options):
             n = batch.shape[0]
 
             batch_shifted = np.concatenate([np.ones((n, 1)), batch], axis=1)  # prepend start symbol
+            batch_shifted = util.to_categorical(batch_shifted, numchars)
+
             batch_out = np.concatenate([batch, np.zeros((n, 1))], axis=1)     # append pad symbol
-            batch_out = util.to_categorical(batch_out, options.top_words)     # output to one-hots
+            batch_out = util.to_categorical(batch_out, numchars)     # output to one-hots
 
             model.train_on_batch(batch_shifted, batch_out)
 
         epochs += options.out_every
 
+        gen_length = 1
+
         # Copy the decoder LSTM to a stateful one
-        stateful_lstm = LSTM(lstm_hidden, input_dim=lstm_hidden, input_length=60, batch_size=1, stateful=True, return_sequences=True)
-        stateful_lstm.build((1, 60, lstm_hidden))
+        stateful_lstm = LSTM(lstm_hidden, input_dim=lstm_hidden, input_length=gen_length, batch_size=1, stateful=True, return_sequences=True)
+        stateful_lstm.build((1, gen_length, lstm_hidden))
         stateful_lstm.set_weights(decoder_lstm.get_weights())
 
-        nwembedding = Embedding(top_words, lstm_hidden, input_length=None, batch_input_shape=(1, None))
-        nwembedding.build((1, None))
-        nwembedding.set_weights(embedding.get_weights())
+        tohidden_copy = Dense(lstm_hidden, batch_input_shape=(1, gen_length, numchars))
+        tohidden_copy.build((1, gen_length, numchars))
+        tohidden_copy.set_weights(tohidden.get_weights())
 
         generator_model = Sequential([
-            nwembedding,
+            tohidden_copy,
             stateful_lstm,
             fromhidden,
             Softmax()
@@ -201,7 +180,7 @@ def go(options):
                 seed = b[0, :]
 
             seed = np.insert(seed, 0, 1)
-            gen = generate_seq(generator_model, stateful_lstm, seed,  60)
+            gen = generate_seq(generator_model, stateful_lstm, seed, numchars, 120)
 
             print('seed   ', decode(seed))
             print('out    ', decode(gen))
@@ -257,11 +236,6 @@ if __name__ == "__main__":
                         dest="max_length",
                         help="Max length",
                         default=None, type=int)
-
-    parser.add_argument("-w", "--top_words",
-                        dest="top_words",
-                        help="Top words",
-                        default=10000, type=int)
 
     options = parser.parse_args()
 

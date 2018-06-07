@@ -20,7 +20,7 @@ Based on https://github.com/ChunML/seq2seq/blob/master/seq2seq_utils.py
 """
 
 # Character limit. Useful for debugging
-LIMIT = None
+LIMIT = 1000000
 
 def load_data(source, dist, vocab_size=10000):
 
@@ -86,6 +86,47 @@ def load_data(source, dist, vocab_size=10000):
 
     return X, len(X_vocab)+2, X_word_to_ix, X_ix_to_word, \
            y, len(y_vocab)+2, y_word_to_ix, y_ix_to_word
+
+def load_char_data(source):
+
+    # Reading raw text from source and destination files
+    f = open(source, 'r')
+    x_data = f.read()
+    f.close()
+
+    print('raw data read')
+
+    if LIMIT is not None:
+        x_data = x_data[:LIMIT]
+
+    # Splitting raw text into array of sequences
+    x = [list(line) for line in x_data.split('\n') if len(line) > 0]
+
+    # Creating the vocabulary set with the most common words (leaving room for PAD, START, UNK)
+    chars = set()
+    for line in x:
+        for char in line:
+            chars.add(char)
+
+    # Creating an array of words from the vocabulary set, we will use this array as index-to-word dictionary
+    ix_to_char = list(chars)
+    # Adding the word "ZERO" to the beginning of the array
+    ix_to_char = ['<PAD>', '<START>', '<UNK>'] + ix_to_char
+
+    # Creating the word-to-index dictionary from the array created above
+    char_to_ix = {word:ix for ix, word in enumerate(ix_to_char)}
+
+    # Converting each word to its index value
+    for i, sentence in enumerate(x):
+        for j, word in enumerate(sentence):
+            if word in char_to_ix:
+                x[i][j] = char_to_ix[word]
+            else:
+                x[i][j] = char_to_ix['<UNK>']
+
+
+
+    return x, len(ix_to_char), char_to_ix, ix_to_char
 
 def process_data(word_sentences, max_len, word_to_ix):
     # Vectorizing each element in each sequence
