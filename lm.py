@@ -171,7 +171,7 @@ def go(options):
     epochs = 0
     while epochs < options.epochs:
 
-        for batch in tqdm(x[:100]):
+        for batch in tqdm(x):
             n = batch.shape[0]
 
             batch_shifted = np.concatenate([np.ones((n, 1)), batch], axis=1)  # prepend start symbol
