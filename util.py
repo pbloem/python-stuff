@@ -20,7 +20,7 @@ Based on https://github.com/ChunML/seq2seq/blob/master/seq2seq_utils.py
 """
 
 # Character limit. Useful for debugging
-LIMIT = None
+LIMIT = 1000000
 
 def load_data(source, dist, vocab_size=10000):
 
@@ -87,7 +87,7 @@ def load_data(source, dist, vocab_size=10000):
     return X, len(X_vocab)+2, X_word_to_ix, X_ix_to_word, \
            y, len(y_vocab)+2, y_word_to_ix, y_ix_to_word
 
-def load_char_data(source):
+def load_char_data(source, length=None):
 
     # Reading raw text from source and destination files
     f = open(source, 'r')
@@ -100,7 +100,10 @@ def load_char_data(source):
         x_data = x_data[:LIMIT]
 
     # Splitting raw text into array of sequences
-    x = [list(line) for line in x_data.split('\n') if len(line) > 0]
+    if length is None:
+        x = [list(line) for line in x_data.split('\n') if len(line) > 0]
+    else:
+        x = [list(chunk) for chunk in chunks(x_data, length)]
 
     # Creating the vocabulary set with the most common words (leaving room for PAD, START, UNK)
     chars = set()
@@ -187,3 +190,7 @@ def to_categorical(batch, num_classes):
 
     return out
 
+def chunks(l, n):
+    """Yield successive n-sized chunks from l."""
+    for i in range(0, len(l), n):
+        yield l[i:i + n]

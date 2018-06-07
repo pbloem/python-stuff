@@ -231,7 +231,7 @@ if __name__ == "__main__":
     parser.add_argument("-l", "--learn-rate",
                         dest="lr",
                         help="Learning rate",
-                        default=0.001, type=float)
+                        default=0.00001, type=float)
 
     parser.add_argument("-b", "--batch-size",
                         dest="batch",
