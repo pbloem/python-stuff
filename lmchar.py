@@ -123,8 +123,11 @@ def go(options):
     input = Input(shape=(None, numchars))
 
     h = LSTM(lstm_hidden, return_sequences=True)(input)
-    # h = LSTM(lstm_hidden, return_sequences=True)(h)
-    # h = LSTM(lstm_hidden, return_sequences=True)(h)
+
+    if options.extra is not None:
+        for _ in range(options.extra):
+            h = LSTM(lstm_hidden, return_sequences=True)(h)
+
     out = TimeDistributed(Dense(numchars, activation='softmax'))(h)
 
     model = Model(input, out)
@@ -217,6 +220,11 @@ if __name__ == "__main__":
     parser.add_argument("-I", "--limit",
                         dest="limit",
                         help="Character cap for the corpus",
+                        default=None, type=int)
+
+    parser.add_argument("-x", "--extra-layers",
+                        dest="extra",
+                        help="Number of extra LSTM layers",
                         default=None, type=int)
 
     options = parser.parse_args()
