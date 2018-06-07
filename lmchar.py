@@ -144,33 +144,25 @@ def go(options):
     x_out = np.concatenate([x, np.zeros((n, 1))], axis=1)  # append pad symbol
     x_out = util.to_categorical(x_out, numchars)  # output to one-hots
 
+    def generate():
+        for i in range(CHECK):
+            b = random.randint(0, n - 1)
+
+            seed = x[b, :20]
+            seed = np.insert(seed, 0, 1)
+            gen = generate_seq(model, seed, numchars, 120)
+
+            print('seed   ', decode(seed))
+            print('out    ', decode(gen))
+
+            print()
+
     # Train the model
-    model.fit(x_shifted, x_out, epochs=options.epochs, batch_size=64)
+    generate_stuff = keras.callbacks.LambdaCallback(
+        on_epoch_end=lambda epoch, logs: generate())
 
-    # Generate some sentences
-    gen_length = 1
+    model.fit(x_shifted, x_out, epochs=options.epochs, batch_size=64, callbacks=[generate_stuff])
 
-    # Copy the decoder LSTM to a stateful one
-    # stateful_lstm = LSTM(lstm_hidden, input_dim=lstm_hidden, input_length=gen_length, batch_size=1, stateful=True, return_sequences=True)
-    # stateful_lstm.build((1, gen_length, lstm_hidden))
-    # stateful_lstm.set_weights(decoder_lstm.get_weights())
-    #
-    # tohidden_copy = Dense(lstm_hidden, batch_input_shape=(1, gen_length, numchars))
-    # tohidden_copy.build((1, gen_length, numchars))
-    # tohidden_copy.set_weights(tohidden.get_weights())
-
-    # show samples for some sentences from random batches
-    for i in range(CHECK):
-        b = random.randint(0, n-1)
-
-        seed = x[b, :20]
-        seed = np.insert(seed, 0, 1)
-        gen = generate_seq(model, seed, numchars, 120)
-
-        print('seed   ', decode(seed))
-        print('out    ', decode(gen))
-
-        print()
 
 if __name__ == "__main__":
 
