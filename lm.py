@@ -56,10 +56,7 @@ def sample(preds, temperature=0.1):
 
     return np.argmax(probas)
 
-def generate_seq(
-        model : Sequential,
-        lstm : LSTM,
-        seed, size):
+def generate_seq(model : Model, seed, size):
 
     ls = seed.shape[0]
 
