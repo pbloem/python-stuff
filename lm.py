@@ -30,6 +30,7 @@ from argparse import ArgumentParser
 from keras.layers import Input, Conv2D, Conv2DTranspose, Dense, Reshape, MaxPooling2D, UpSampling2D, Flatten, Cropping2D
 from keras.models import Model, Sequential
 from keras.engine.topology import Layer
+from keras.utils import to_categorical
 
 import util
 
@@ -160,21 +161,24 @@ def go(options):
 
     out = TimeDistributed(fromhidden)(h)
 
-    auto = Model(input_shifted, out)
+    model = Model(input_shifted, out)
 
     opt = keras.optimizers.Adam(lr=options.lr)
 
-    auto.compile(opt, sparse_loss)
+    model.compile(opt, 'categorical_crossentropy')
+    model.summary()
 
     epochs = 0
     while epochs < options.epochs:
 
-        for batch in tqdm(x):
+        for batch in tqdm(x[:100]):
             n = batch.shape[0]
-            batch_shifted = np.concatenate([np.ones((n, 1)), batch], axis=1)  # prepend start symbol
-            batch_out = np.concatenate([batch, np.zeros((n, 1))], axis=1)[:, :, None]  # append pad symbol
 
-            auto.train_on_batch(batch_shifted, batch_out)
+            batch_shifted = np.concatenate([np.ones((n, 1)), batch], axis=1)  # prepend start symbol
+            batch_out = np.concatenate([batch, np.zeros((n, 1))], axis=1)     # append pad symbol
+            batch_out = util.to_categorical(batch_out, options.top_words)     # output to one-hots
+
+            model.train_on_batch(batch_shifted, batch_out)
 
         epochs += options.out_every
 
@@ -204,14 +208,12 @@ def go(options):
             else:
                 seed = b[0, :]
 
-            print(seed)
             seed = np.insert(seed, 0, 1)
-            print(seed)
-
             gen = generate_seq(generator_model, stateful_lstm, seed,  60)
 
-            print('seed  ', decode(seed))
-            print('out   ', decode(gen))
+            print('seed   ', decode(seed))
+            print('out    ', decode(gen))
+
             print()
 
 if __name__ == "__main__":

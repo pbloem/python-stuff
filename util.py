@@ -3,6 +3,9 @@ from keras.models import Sequential
 from keras.layers import Activation, TimeDistributed, Dense, RepeatVector, recurrent, Embedding
 from keras.layers.recurrent import LSTM
 from keras.optimizers import Adam, RMSprop
+from keras.utils import to_categorical
+import keras.utils
+
 from nltk import FreqDist
 import numpy as np
 import os, sys
@@ -125,4 +128,21 @@ def batch_pad(x, batch_size, min_length=3):
     print('max length per batch: ', [max([len(l) for l in batch]) for batch in batches])
     return batches
 
+def to_categorical(batch, num_classes):
+    """
+    Converts a batch of length-padded integer sequences to a one-hot encoded sequence
+    :param batch:
+    :param num_classes:
+    :return:
+    """
+
+    b, l = batch.shape
+
+    out = np.zeros((b, l, num_classes))
+
+    for i in range(b):
+        seq = batch[0, :]
+        out[i, :, :] = keras.utils.to_categorical(seq, num_classes=num_classes)
+
+    return out
 
