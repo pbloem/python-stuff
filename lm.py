@@ -37,7 +37,7 @@ import util
 INDEX_FROM = 3
 CHECK = 5
 
-def sample(preds, temperature=0.1):
+def sample(preds, temperature=1.0):
     """
     Sample an index from a probability vector
 
