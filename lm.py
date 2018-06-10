@@ -32,6 +32,8 @@ from keras.models import Model, Sequential
 from keras.engine.topology import Layer
 from keras.utils import to_categorical
 
+from tensorboardX import SummaryWriter
+
 import util
 
 INDEX_FROM = 3
@@ -85,6 +87,8 @@ def go(options):
     lstm_hidden = options.lstm_capacity
 
     print('devices', device_lib.list_local_devices())
+
+    tbw = SummaryWriter(log_dir=options.tb_dir)
 
     if options.task == 'europarl':
 
@@ -158,16 +162,20 @@ def go(options):
     model.summary()
 
     epochs = 0
+    instances_seen = 0
     while epochs < options.epochs:
 
         for batch in tqdm(x):
-            n = batch.shape[0]
+            n, l = batch.shape
 
             batch_shifted = np.concatenate([np.ones((n, 1)), batch], axis=1)  # prepend start symbol
             batch_out = np.concatenate([batch, np.zeros((n, 1))], axis=1)     # append pad symbol
             batch_out = util.to_categorical(batch_out, options.top_words)     # output to one-hots
 
-            model.train_on_batch(batch_shifted, batch_out)
+            loss = model.train_on_batch(batch_shifted, batch_out)
+
+            instances_seen += n
+            tbw.add_scalar('lm/batch-loss', loss/l , instances_seen)
 
         epochs += options.out_every
 
@@ -247,6 +255,11 @@ if __name__ == "__main__":
                         dest="limit",
                         help="Character cap for the corpus",
                         default=None, type=int)
+
+    parser.add_argument("-T", "--tb-directory",
+                        dest="tb_dir",
+                        help="Tensorboard directory",
+                        default='./runs/lm', type=str)
 
     options = parser.parse_args()
 

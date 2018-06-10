@@ -10,6 +10,8 @@ from keras.layers import \
 from keras.optimizers import Adam
 from tensorflow.python.client import device_lib
 
+from tensorboardX import SummaryWriter
+
 from keras.utils import multi_gpu_model
 
 import tensorflow as tf
@@ -156,12 +158,16 @@ def sparse_loss(y_true, y_pred):
     return K.sparse_categorical_crossentropy(y_true, y_pred, from_logits=True)
     #return tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y_true,
     #                                                      logits=y_pred)
+
+
 def go(options):
     slength = options.max_length
     top_words = options.top_words
     lstm_hidden = options.lstm_capacity
 
     print('devices', device_lib.list_local_devices())
+
+    tbw = SummaryWriter(log_dir=options.tb_dir)
 
     if options.task == 'europarl':
 
@@ -255,17 +261,22 @@ def go(options):
     auto.compile(opt, sparse_loss)
 
     epochs = 0
+    instances_seen = 0
     while epochs < options.epochs:
 
         print('Set KL weight to ', anneal(epochs, options.epochs))
         K.set_value(kl.weight, anneal(epochs, options.epochs))
 
         for batch in tqdm(x):
-            n = batch.shape[0]
+            n, l = batch.shape
+
             batch_shifted = np.concatenate([np.ones((n, 1)), batch], axis=1)  # prepend start symbol
             batch_out = np.concatenate([batch, np.zeros((n, 1))], axis=1)[:, :, None]  # append pad symbol
 
-            auto.train_on_batch([batch, batch_shifted], batch_out)
+            loss = auto.train_on_batch([batch, batch_shifted], batch_out)
+
+            instances_seen += n
+            tbw.add_scalar('seq2seq/batch-loss', loss/l , instances_seen)
 
         epochs += options.out_every
 
@@ -343,6 +354,11 @@ if __name__ == "__main__":
                         dest="data_dir",
                         help="Data directory",
                         default='./data', type=str)
+
+    parser.add_argument("-T", "--tb-directory",
+                        dest="tb_dir",
+                        help="Tensorboard directory",
+                        default='./runs', type=str)
 
     parser.add_argument("-d", "--dropout-rate",
                         dest="dropout",
