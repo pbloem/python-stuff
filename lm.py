@@ -32,6 +32,8 @@ from keras.models import Model, Sequential
 from keras.engine.topology import Layer
 from keras.utils import to_categorical
 
+import numpy as np
+
 from tensorboardX import SummaryWriter
 
 import util
@@ -68,13 +70,13 @@ def generate_seq(model : Model, seed, size):
 
     tokens = np.concatenate([seed, np.zeros(size - ls)])
 
-    for i in range(ls, size-1):
+    for i in range(ls, size):
 
         probs = model.predict(tokens[None,:])
         # Extract the i-th probability vector and sample an index from it
-        next_token = sample(probs[0, i, :])
+        next_token = sample(probs[0, i-i, :])
 
-        tokens[i+1] = next_token
+        tokens[i] = next_token
 
     return [int(t) for t in tokens]
 
@@ -89,6 +91,13 @@ def go(options):
     print('devices', device_lib.list_local_devices())
 
     tbw = SummaryWriter(log_dir=options.tb_dir)
+
+    if options.seed < 0:
+        seed = random.randint(0, 1000000)
+        print('random seed: ', seed)
+        np.random.seed(seed)
+    else:
+        np.random.seed(options.seed)
 
     if options.task == 'europarl':
 
@@ -157,8 +166,9 @@ def go(options):
     model = Model(input, out)
 
     opt = keras.optimizers.Adam(lr=options.lr)
+    lss = keras.losses.categorical_crossentropy
 
-    model.compile(opt, 'categorical_crossentropy')
+    model.compile(opt, lss)
     model.summary()
 
     epochs = 0
@@ -175,7 +185,7 @@ def go(options):
             loss = model.train_on_batch(batch_shifted, batch_out)
 
             instances_seen += n
-            tbw.add_scalar('lm/batch-loss', loss/l , instances_seen)
+            tbw.add_scalar('lm/batch-loss', float(loss), instances_seen)
 
         epochs += options.out_every
 
@@ -260,6 +270,11 @@ if __name__ == "__main__":
                         dest="tb_dir",
                         help="Tensorboard directory",
                         default='./runs/lm', type=str)
+
+    parser.add_argument("-r", "--random-seed",
+                        dest="seed",
+                        help="RNG seed. Negative for random",
+                        default=1, type=int)
 
     options = parser.parse_args()
 
