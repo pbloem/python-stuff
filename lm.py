@@ -118,7 +118,24 @@ def go(options):
     else:
         np.random.seed(options.seed)
 
-    if options.task == 'europarl':
+    if options.task == 'file':
+
+        dir = options.data_dir
+        x, x_vocab_len, x_word_to_ix, x_ix_to_word = \
+            util.load_sentences(options.data_dir, vocab_size=top_words, limit=options.limit)
+
+        # Finding the length of the longest sequence
+        x_max_len = max([len(sentence) for sentence in x])
+
+        print('max sequence length ', x_max_len)
+        print(len(x_ix_to_word), 'distinct words')
+
+        x = util.batch_pad(x, options.batch)
+
+        def decode(seq):
+            return ' '.join(x_ix_to_word[id] for id in seq)
+
+    elif options.task == 'europarl':
 
         dir = options.data_dir
         x, x_vocab_len, x_word_to_ix, x_ix_to_word, _, _, _, _ = \
@@ -133,10 +150,9 @@ def go(options):
         x = util.batch_pad(x, options.batch)
 
         def decode(seq):
-            print(seq)
             return ' '.join(x_ix_to_word[id] for id in seq)
 
-    else:
+    elif options.task == 'imdb':
         # Load only training sequences
         (x, _), _ = imdb.load_data(num_words=top_words)
 
@@ -159,8 +175,8 @@ def go(options):
 
         def decode(seq):
             return ' '.join(id_to_word[id] for id in seq)
-
-
+    else:
+        raise Exception('Task {} not recognized.'.format(options.task))
     print('Data Loaded.')
 
     print(sum([b.shape[0] for b in x]), ' sentences loaded')
@@ -208,7 +224,7 @@ def go(options):
         epochs += options.out_every
 
         # Show samples for some sentences from random batches
-        for temp in [0.001, 0.1, 1, 10, 100]:
+        for temp in [0.2, 0.5, 1, 2, 5]:
             print('### TEMP ', temp)
             for i in range(CHECK):
                 b = random.choice(x)

@@ -84,6 +84,48 @@ def load_data(source, dist, vocab_size=10000, limit=None):
     return X, len(X_vocab)+2, X_word_to_ix, X_ix_to_word, \
            y, len(y_vocab)+2, y_word_to_ix, y_ix_to_word
 
+def load_sentences(source, vocab_size=10000, limit=None):
+
+    # Reading raw text from source and destination files
+    f = open(source, 'r')
+    X_data = f.read()
+    f.close()
+
+    print('raw data read')
+
+    if limit is not None:
+        X_data = X_data[:limit]
+
+    # Splitting raw text into array of sequences
+    X = [text_to_word_sequence(x) for x in X_data.split('\n') if len(x) > 0]
+
+    # Creating the vocabulary set with the most common words (leaving room for PAD, START, UNK)
+    dist = FreqDist(np.hstack(X))
+    X_vocab = dist.most_common(vocab_size - 3)
+
+    # Creating an array of words from the vocabulary set, we will use this array as index-to-word dictionary
+    X_ix_to_word = [word[0] for word in X_vocab]
+    # Adding the word "ZERO" to the beginning of the array
+    X_ix_to_word = ['<PAD>', '<START>', '<UNK>'] + X_ix_to_word
+
+    # Creating the word-to-index dictionary from the array created above
+    X_word_to_ix = {word:ix for ix, word in enumerate(X_ix_to_word)}
+
+    # print(X_word_to_ix['<PAD>'])
+    # print(X_word_to_ix['the'])
+    # print(X_word_to_ix['session'])
+    # print(X_word_to_ix['resumption'])
+
+    # Converting each word to its index value
+    for i, sentence in enumerate(X):
+        for j, word in enumerate(sentence):
+            if word in X_word_to_ix:
+                X[i][j] = X_word_to_ix[word]
+            else:
+                X[i][j] = X_word_to_ix['<UNK>']
+
+    return X, len(X_vocab)+2, X_word_to_ix, X_ix_to_word
+
 def load_char_data(source, limit=None, length=None):
 
     # Reading raw text from source and destination files
