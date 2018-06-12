@@ -60,7 +60,26 @@ def sample(preds, temperature=1.0):
 
     return np.argmax(probas)
 
-def generate_seq(model : Model, seed, size):
+def sample_logits(preds, temperature=1.0):
+    """
+    Sample an index from a probability vector
+
+    :param preds:
+    :param temperature:
+    :return:
+    """
+
+    preds = np.asarray(preds).astype('float64')
+    preds = preds / temperature
+
+    exp_preds = np.exp(preds)
+    preds = exp_preds / np.sum(exp_preds)
+
+    probas = np.random.multinomial(1, preds, 1)
+
+    return np.argmax(probas)
+
+def generate_seq(model : Model, seed, size, temperature=1.0):
 
     ls = seed.shape[0]
 
@@ -74,7 +93,7 @@ def generate_seq(model : Model, seed, size):
 
         probs = model.predict(tokens[None,:])
         # Extract the i-th probability vector and sample an index from it
-        next_token = sample(probs[0, i-i, :])
+        next_token = sample_logits(probs[0, i-i, :], temperature=temperature)
 
         tokens[i] = next_token
 
@@ -160,13 +179,13 @@ def go(options):
     decoder_lstm = LSTM(lstm_hidden, return_sequences=True)
     h = decoder_lstm(embedded)
 
-    fromhidden = Dense(top_words, activation='softmax')
+    fromhidden = Dense(top_words, activation='linear')
     out = TimeDistributed(fromhidden)(h)
 
     model = Model(input, out)
 
     opt = keras.optimizers.Adam(lr=options.lr)
-    lss = keras.losses.categorical_crossentropy
+    lss = sparse_loss
 
     model.compile(opt, lss)
     model.summary()
@@ -180,31 +199,29 @@ def go(options):
 
             batch_shifted = np.concatenate([np.ones((n, 1)), batch], axis=1)  # prepend start symbol
             batch_out = np.concatenate([batch, np.zeros((n, 1))], axis=1)     # append pad symbol
-            batch_out = util.to_categorical(batch_out, options.top_words)     # output to one-hots
 
-            loss = model.train_on_batch(batch_shifted, batch_out)
+            loss = model.train_on_batch(batch_shifted, batch_out[:, :, None])
 
             instances_seen += n
             tbw.add_scalar('lm/batch-loss', float(loss), instances_seen)
 
         epochs += options.out_every
 
-        # show samples for some sentences from random batches
-        for i in range(CHECK):
-            b = random.choice(x)
+        # Show samples for some sentences from random batches
+        for temp in [0.001, 0.1, 1, 10, 100]:
+            print('### TEMP ', temp)
+            for i in range(CHECK):
+                b = random.choice(x)
 
-            if b.shape[1] > 20:
-                seed = b[0,:20]
-            else:
-                seed = b[0, :]
+                if b.shape[1] > 20:
+                    seed = b[0,:20]
+                else:
+                    seed = b[0, :]
 
-            seed = np.insert(seed, 0, 1)
-            gen = generate_seq(model, seed,  60)
+                seed = np.insert(seed, 0, 1)
+                gen = generate_seq(model, seed,  60, temperature=temp)
 
-            print('seed   ', decode(seed))
-            print('out    ', decode(gen))
-
-            print()
+                print('*** [', decode(seed), '] ', decode(gen[len(seed):]))
 
 if __name__ == "__main__":
 
