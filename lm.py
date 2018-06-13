@@ -76,13 +76,11 @@ def sample_logits(preds, temperature=1.0):
         return np.argmax(preds)
 
     preds = preds / temperature
+    preds = preds - logsumexp(preds)
 
-    exp_preds = np.exp(preds)
-    preds = exp_preds / logsumexp(preds)
+    choice = np.random.choice(len(preds), 1, p=np.exp(preds))
 
-    probas = np.random.multinomial(1, preds, 1)
-
-    return np.argmax(probas)
+    return choice
 
 def generate_seq(model : Model, seed, size, temperature=1.0):
 
