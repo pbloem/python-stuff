@@ -1,5 +1,7 @@
 import keras
 
+from scipy.misc import logsumexp
+
 import keras.backend as K
 from keras.preprocessing import sequence
 from keras.datasets import imdb
@@ -68,12 +70,15 @@ def sample_logits(preds, temperature=1.0):
     :param temperature:
     :return:
     """
-
     preds = np.asarray(preds).astype('float64')
+
+    if temperature == 0.0:
+        return np.argmax(preds)
+
     preds = preds / temperature
 
     exp_preds = np.exp(preds)
-    preds = exp_preds / np.sum(exp_preds)
+    preds = exp_preds / logsumexp(preds)
 
     probas = np.random.multinomial(1, preds, 1)
 
@@ -84,7 +89,7 @@ def generate_seq(model : Model, seed, size, temperature=1.0):
     ls = seed.shape[0]
 
     # Due to the way Keras RNNs work, we feed the model the
-    # whole sequence each time, constantly sampling the nect character.
+    # whole sequence each time, constantly sampling the nect word.
     # It's a little bit inefficient, but that doesn't matter much when generating
 
     tokens = np.concatenate([seed, np.zeros(size - ls)])
@@ -228,7 +233,7 @@ def go(options):
         epochs += options.out_every
 
         # Show samples for some sentences from random batches
-        for temp in [0.2, 0.5, 1, 2, 5]:
+        for temp in [0.0, 0.5, 1, 2, 5]:
             print('### TEMP ', temp)
             for i in range(CHECK):
                 b = random.choice(x)
