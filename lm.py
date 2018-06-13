@@ -195,6 +195,10 @@ def go(options):
     decoder_lstm = LSTM(lstm_hidden, return_sequences=True)
     h = decoder_lstm(embedded)
 
+    if options.extra is not None:
+        for _ in range(options.extra):
+            h = LSTM(lstm_hidden, return_sequences=True)(h)
+
     fromhidden = Dense(top_words, activation='linear')
     out = TimeDistributed(fromhidden)(h)
 
@@ -308,6 +312,11 @@ if __name__ == "__main__":
                         dest="seed",
                         help="RNG seed. Negative for random",
                         default=1, type=int)
+
+    parser.add_argument("-x", "--extra-layers",
+                        dest="extra",
+                        help="Number of extra LSTM layers",
+                        default=None, type=int)
 
     options = parser.parse_args()
 
