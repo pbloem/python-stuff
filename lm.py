@@ -96,7 +96,8 @@ def generate_seq(model : Model, seed, size, temperature=1.0):
 
         probs = model.predict(tokens[None,:])
         # Extract the i-th probability vector and sample an index from it
-        next_token = sample_logits(probs[0, i-i, :], temperature=temperature)
+
+        next_token = sample_logits(probs[0, i-1, :], temperature=temperature)
 
         tokens[i] = next_token
 
