@@ -189,7 +189,7 @@ def go(options):
     z_exp = expandz(zsample)
 
     seq = embedding(input_shifted)
-    # embedded_shifted = SpatialDropout1D(rate=options.dropout)(embedded_shifted)
+    seq = SpatialDropout1D(rate=options.dropout)(seq)
 
     decoder_lstm = LSTM(lstm_hidden, return_sequences=True)
     h = decoder_lstm(seq, initial_state=[z_exp, z_exp])
