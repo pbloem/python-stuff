@@ -228,6 +228,9 @@ def go(options):
     epochs = 0
     instances_seen = 0
 
+    # DEBUG
+    # x = x[:20]
+
     while epochs < options.epochs:
 
         print('Set KL weight to ', anneal(epochs, options.epochs))
@@ -243,7 +246,7 @@ def go(options):
             loss = auto.train_on_batch([batch, batch_shifted, eps], batch_out)
 
             instances_seen += n
-            tbw.add_scalar('seq2seq/batch-loss', loss/l , instances_seen)
+            tbw.add_scalar('seq2seq/batch-loss', float(loss), instances_seen)
 
         epochs += options.out_every
 
@@ -262,7 +265,6 @@ def go(options):
             print('out 2 ', decode(gen))
             gen = generate_seq(decoder, z=z)
             print('out 3 ', decode(gen))
-
             print()
 
 if __name__ == "__main__":
