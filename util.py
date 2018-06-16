@@ -1,10 +1,11 @@
 from keras.preprocessing.text import text_to_word_sequence
 from keras.models import Sequential
-from keras.layers import Activation, TimeDistributed, Dense, RepeatVector, recurrent, Embedding
+from keras.layers import Activation, TimeDistributed, Dense, RepeatVector, recurrent, Embedding, Input, Layer
 from keras.layers.recurrent import LSTM
 from keras.optimizers import Adam, RMSprop
 from keras.utils import to_categorical
 import keras.utils
+import keras.backend as K
 
 from nltk import FreqDist
 import numpy as np
@@ -12,6 +13,7 @@ import os, sys
 import datetime
 from keras.preprocessing import sequence
 
+from scipy.misc import logsumexp
 
 """
 
@@ -233,3 +235,92 @@ def chunks(l, n):
     """Yield successive n-sized chunks from l."""
     for i in range(0, len(l), n):
         yield l[i:i + n]
+
+def sample(preds, temperature=1.0):
+    """
+    Sample an index from a probability vector
+
+    :param preds:
+    :param temperature:
+    :return:
+    """
+
+    preds = np.asarray(preds).astype('float64')
+    preds = np.log(preds) / temperature
+
+    exp_preds = np.exp(preds)
+    preds = exp_preds / np.sum(exp_preds)
+
+    probas = np.random.multinomial(1, preds, 1)
+
+    return np.argmax(probas)
+
+def sample_logits(preds, temperature=1.0):
+    """
+    Sample an index from a probability vector
+
+    :param preds:
+    :param temperature:
+    :return:
+    """
+    preds = np.asarray(preds).astype('float64')
+
+    if temperature == 0.0:
+        return np.argmax(preds)
+
+    preds = preds / temperature
+    preds = preds - logsumexp(preds)
+
+    choice = np.random.choice(len(preds), 1, p=np.exp(preds))
+
+    return choice
+
+class KLLayer(Layer):
+
+    """
+    Identity transform layer that adds KL divergence
+    to the final model loss.
+
+    During training, call
+            K.set_value(kl_layer.weight, new_value)
+    to scale the KL loss term.
+
+    based on:
+    http://tiao.io/posts/implementing-variational-autoencoders-in-keras-beyond-the-quickstart-tutorial/
+    """
+
+    def __init__(self, weight = None, *args, **kwargs):
+        self.is_placeholder = True
+        self.weight = weight
+        super().__init__(*args, **kwargs)
+
+    def call(self, inputs):
+        mu, log_var = inputs
+
+        kl_batch = - .5 * K.sum(1 + log_var -
+                                K.square(mu) -
+                                K.exp(log_var), axis=-1)
+
+        self.add_loss((1.0 if self.weight is None else self.weight) * K.mean(kl_batch), inputs=inputs)
+
+        return inputs
+
+class Sample(Layer):
+    """
+    Performs sampling step
+    """
+    def __init__(self, *args, **kwargs):
+        self.is_placeholder = True
+        super().__init__(*args, **kwargs)
+
+    def call(self, inputs):
+
+        mu, log_var, eps = inputs
+
+        z = K.exp(.5 * log_var) * eps + mu
+
+        return z
+
+    def compute_output_shape(self, input_shape):
+        shape_mu, _, _ = input_shape
+        return shape_mu

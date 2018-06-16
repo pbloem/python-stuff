@@ -44,102 +44,29 @@ def anneal(step, total, k = 1.0, anneal_function='logistic'):
         elif anneal_function == 'linear':
             return min(1, step/total)
 
-class KLLayer(Layer):
-
-    """
-    Identity transform layer that adds KL divergence
-    to the final model loss.
-
-    http://tiao.io/posts/implementing-variational-autoencoders-in-keras-beyond-the-quickstart-tutorial/
-    """
-
-    def __init__(self, weight = K.variable(1.0), *args, **kwargs):
-        self.is_placeholder = True
-        self.weight = weight
-        super().__init__(*args, **kwargs)
-
-    def call(self, inputs):
-
-        mu, log_var = inputs
-
-        kl_batch = - .5 * K.sum(1 + log_var -
-                                K.square(mu) -
-                                K.exp(log_var), axis=-1)
-
-        self.add_loss(K.mean(kl_batch), inputs=inputs)
-
-        return inputs
-
-def s(layer):
-    return Sequential([layer])
-
-class Sample(Layer):
-
-    """
-    Performs sampling step
-
-    """
-    def __init__(self, *args, **kwargs):
-        self.is_placeholder = True
-        super().__init__(*args, **kwargs)
-
-    def call(self, inputs):
-
-        mu, log_var = inputs
-
-        eps = Input(tensor=K.random_normal(shape=K.shape(mu) ))
-
-        z = K.exp(.5 * log_var) * eps + mu
-
-        return z
-
-    def compute_output_shape(self, input_shape):
-        shape_mu, _ = input_shape
-        return shape_mu
-
-
-def sample(preds, temperature=1.0):
-    """
-    Sample an index from a probability vector
-
-    :param preds:
-    :param temperature:
-    :return:
-    """
-
-    # helper function to sample an index from a probability array
-    preds = np.asarray(preds).astype('float64')
-    preds = np.log(preds) / temperature
-
-    exp_preds = np.exp(preds)
-    preds = exp_preds / np.sum(exp_preds)
-
-    probas = np.random.multinomial(1, preds, 1)
-
-    return np.argmax(probas)
-
 def generate_seq(
-        model : Sequential,
-        lstm : LSTM,
-        sos, z, size):
+        model : Model,
+        z,
+        size = 60,
+        lstm_layer = None,
+        seed = np.ones(1), temperature=1.0):
 
-    lstm.reset_states([z, z])
+    # Keras doesn't allow us to easily execute seqence models step by step so we just feed it a zero-sequence multiple
+    # times. At step i, we sample a word w from the predictions at i, and set that as element i+1 in the sequence.
 
-    last_token = sos
+    ls = seed.shape[0]
+    tokens = np.concatenate([seed, np.zeros(size - ls)])
 
-    tokens = [last_token]
+    for i in range(ls, size):
 
-    # generate a fixed number of words
-    for _ in range(size):
+        probs = model.predict([tokens[None,:], z])
 
-        next_probs = model.predict(np.asarray([[last_token]]))
-        next_token = sample(next_probs[0, 0, :])
+        # Extract the i-th probability vector and sample an index from it
+        next_token = util.sample_logits(probs[0, i-1, :], temperature=temperature)
 
-        tokens.append(next_token)
+        tokens[i] = next_token
 
-        last_token = next_token
-
-    return tokens
+    return [int(t) for t in tokens]
 
 
 def decode_imdb(seq):
@@ -156,11 +83,9 @@ def decode_imdb(seq):
 
 def sparse_loss(y_true, y_pred):
     return K.sparse_categorical_crossentropy(y_true, y_pred, from_logits=True)
-    #return tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y_true,
-    #                                                      logits=y_pred)
-
 
 def go(options):
+
     slength = options.max_length
     top_words = options.top_words
     lstm_hidden = options.lstm_capacity
@@ -169,7 +94,24 @@ def go(options):
 
     tbw = SummaryWriter(log_dir=options.tb_dir)
 
-    if options.task == 'europarl':
+    if options.task == 'file':
+
+        dir = options.data_dir
+        x, x_vocab_len, x_word_to_ix, x_ix_to_word = \
+            util.load_sentences(options.data_dir, vocab_size=top_words)
+
+        # Finding the length of the longest sequence
+        x_max_len = max([len(sentence) for sentence in x])
+
+        print('max sequence length ', x_max_len)
+        print(len(x_ix_to_word), 'distinct words')
+
+        x = util.batch_pad(x, options.batch)
+
+        def decode(seq):
+            return ' '.join(x_ix_to_word[id] for id in seq)
+
+    elif options.task == 'europarl':
 
         dir = options.data_dir
         x, x_vocab_len, x_word_to_ix, x_ix_to_word, _, _, _, _ = \
@@ -214,54 +156,78 @@ def go(options):
     #     print(decode(x[i, :]))
 
 
-    ## Define model
-    input = Input(shape=(None, ))
+    ## Define encoder
+    input = Input(shape=(None, ), name='inp')
 
     embedding = Embedding(top_words, options.embedding_size, input_length=None)
-
     embedded = embedding(input)
+
     h = Bidirectional(LSTM(lstm_hidden))(embedded)
 
-    zmean = Dense(options.hidden)(h)
-    zlsigma = Dense(options.hidden)(h)
+    tozmean = Dense(options.hidden)
+    zmean = tozmean(h)
 
-    kl = KLLayer()
-    h = kl([zmean, zlsigma]) # computes the KL loss and stores it for later
+    tozlsigma = Dense(options.hidden)
+    zlsigma = tozlsigma(h)
 
-    z = Sample()(h)  # implements the reparam trick
+    ## Define KL Loss and sampling
 
-    latenttohidden = Dense(lstm_hidden, input_shape=(options.hidden,))
-    z_exp = latenttohidden(z)
+    kl = util.KLLayer(weight = K.variable(1.0)) # computes the KL loss and stores it for later
+    zmean, zlsigma = kl([zmean, zlsigma])
 
-    input_shifted = Input(shape=(None, ))
-    embedded_shifted = embedding(input_shifted)
+    eps = Input(shape=(options.hidden,), name='inp-epsilon')
 
-    embedded_shifted = SpatialDropout1D(rate=options.dropout)(embedded_shifted)
+    sample = util.Sample()
+    zsample = sample([zmean, zlsigma, eps])
 
-    # zrep = RepeatVector(slength + 1)(z)
-    # catted = Concatenate(axis=2)( [zrep, embedded_shifted] )
+    ## Define decoder
 
-    tohidden   = Dense(lstm_hidden)
-    fromhidden = Dense(top_words)
+    # zsample = Input(shape=(options.hidden,), name='inp-decoder-z')
+    input_shifted = Input(shape=(None, ), name='inp-shifted')
+
+    expandz = Dense(lstm_hidden, input_shape=(options.hidden,))
+    z_exp = expandz(zsample)
+
+    seq = embedding(input_shifted)
+    # embedded_shifted = SpatialDropout1D(rate=options.dropout)(embedded_shifted)
+
     decoder_lstm = LSTM(lstm_hidden, return_sequences=True)
+    h = decoder_lstm(seq, initial_state=[z_exp, z_exp])
 
-    h = TimeDistributed(tohidden)(embedded_shifted)
-    h = decoder_lstm(h, initial_state=[z_exp, z_exp])
+    towords = TimeDistributed(Dense(top_words))
+    out = towords(h)
 
-    out = TimeDistributed(fromhidden)(h)
+    auto = Model([input, input_shifted, eps], out)
+
+    ## Extract the encoder and decoder models form the autoencoder
+
+    # - NB: This isn't exactly DRY. It seems much nicer to build a separate encoder and decoder model and then build a
+    #   an autoencoder model that chains the two. For the life of me, I couldn't get it to work. For some reason the
+    #   gradients don't seem to propagate down to the decoder. Let me know if you have better luck.
 
     encoder = Model(input, [zmean, zlsigma])
-    auto = Model([input, input_shifted], out)
 
+    z_in = Input(shape=(options.hidden,))
+    s_in = Input(shape=(None,))
+    seq = embedding(s_in)
+    z_exp = expandz(z_in)
+    h = decoder_lstm(seq, initial_state=[z_exp, z_exp])
+    out = towords(h)
+
+    decoder = Model([s_in, z_in], out)
+
+    ## Compile the autoencoder model
     if options.num_gpu is not None:
         auto = multi_gpu_model(auto, gpus=options.num_gpu)
 
     opt = keras.optimizers.Adam(lr=options.lr)
 
     auto.compile(opt, sparse_loss)
+    auto.summary()
 
     epochs = 0
     instances_seen = 0
+
     while epochs < options.epochs:
 
         print('Set KL weight to ', anneal(epochs, options.epochs))
@@ -270,48 +236,33 @@ def go(options):
         for batch in tqdm(x):
             n, l = batch.shape
 
-            batch_shifted = np.concatenate([np.ones((n, 1)), batch], axis=1)  # prepend start symbol
-            batch_out = np.concatenate([batch, np.zeros((n, 1))], axis=1)[:, :, None]  # append pad symbol
+            batch_shifted = np.concatenate([np.ones((n, 1)), batch], axis=1)            # prepend start symbol
+            batch_out = np.concatenate([batch, np.zeros((n, 1))], axis=1)[:, :, None]   # append pad symbol
+            eps = np.random.randn(n, options.hidden)   # random noise for the sampling layer
 
-            loss = auto.train_on_batch([batch, batch_shifted], batch_out)
+            loss = auto.train_on_batch([batch, batch_shifted, eps], batch_out)
 
             instances_seen += n
             tbw.add_scalar('seq2seq/batch-loss', loss/l , instances_seen)
 
         epochs += options.out_every
 
-        # Copy the decoder LSTM to a stateful one
-        stateful_lstm = LSTM(lstm_hidden, input_dim=lstm_hidden, input_length=60, batch_size=1, stateful=True, return_sequences=True)
-        stateful_lstm.build((1, 60, lstm_hidden))
-        stateful_lstm.set_weights(decoder_lstm.get_weights())
-
-        nwembedding = Embedding(top_words, options.embedding_size, input_length=None, batch_input_shape=(1, None))
-        nwembedding.build((1, None))
-        nwembedding.set_weights(embedding.get_weights())
-
-        generator_model = Sequential([
-            nwembedding,
-            tohidden,
-            stateful_lstm,
-            fromhidden,
-            Softmax()
-        ])
-
         # show samples for some sentences from random batches
         for i in range(CHECK):
             b = random.choice(x)
 
-            n = b.shape[0]
-            b_shifted = np.concatenate([np.ones((n, 1)), b], axis=1)  # prepend start symbol
-
             z, _ = encoder.predict(b)
             z = z[None, 0, :]
 
-            z = Sequential([latenttohidden]).predict(z)
-            gen = generate_seq(generator_model, stateful_lstm, 1, z, 60)
+            print('in    ',  decode(b[0, :]))
 
-            print('in   ',  decode(b[0, :]))
-            print('out   ', decode(gen))
+            gen = generate_seq(decoder, z=z)
+            print('out 1 ', decode(gen))
+            gen = generate_seq(decoder, z=z)
+            print('out 2 ', decode(gen))
+            gen = generate_seq(decoder, z=z)
+            print('out 3 ', decode(gen))
+
             print()
 
 if __name__ == "__main__":
@@ -337,7 +288,7 @@ if __name__ == "__main__":
     parser.add_argument("-l", "--learn-rate",
                         dest="lr",
                         help="Learning rate",
-                        default=0.001, type=float)
+                        default=0.0001, type=float)
 
     parser.add_argument("-b", "--batch-size",
                         dest="batch",
@@ -348,7 +299,6 @@ if __name__ == "__main__":
                         dest="task",
                         help="Task",
                         default='imdb', type=str)
-
 
     parser.add_argument("-D", "--data-directory",
                         dest="data_dir",
@@ -375,10 +325,9 @@ if __name__ == "__main__":
                         help="LSTM capacity",
                         default=256, type=int)
 
-
     parser.add_argument("-g", "--num-gpu",
                         dest="num_gpu",
-                        help="How many GPUs to use",
+                        help="How many GPUs to use (Default is 1 if available, You only need to set this if you wish to use more than 1).",
                         default=None, type=int)
 
     parser.add_argument("-m", "--max_length",

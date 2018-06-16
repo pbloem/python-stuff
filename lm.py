@@ -1,7 +1,5 @@
 import keras
 
-from scipy.misc import logsumexp
-
 import keras.backend as K
 from keras.preprocessing import sequence
 from keras.datasets import imdb
@@ -43,44 +41,7 @@ import util
 INDEX_FROM = 3
 CHECK = 5
 
-def sample(preds, temperature=1.0):
-    """
-    Sample an index from a probability vector
 
-    :param preds:
-    :param temperature:
-    :return:
-    """
-
-    preds = np.asarray(preds).astype('float64')
-    preds = np.log(preds) / temperature
-
-    exp_preds = np.exp(preds)
-    preds = exp_preds / np.sum(exp_preds)
-
-    probas = np.random.multinomial(1, preds, 1)
-
-    return np.argmax(probas)
-
-def sample_logits(preds, temperature=1.0):
-    """
-    Sample an index from a probability vector
-
-    :param preds:
-    :param temperature:
-    :return:
-    """
-    preds = np.asarray(preds).astype('float64')
-
-    if temperature == 0.0:
-        return np.argmax(preds)
-
-    preds = preds / temperature
-    preds = preds - logsumexp(preds)
-
-    choice = np.random.choice(len(preds), 1, p=np.exp(preds))
-
-    return choice
 
 def generate_seq(model : Model, seed, size, temperature=1.0):
 
@@ -97,7 +58,7 @@ def generate_seq(model : Model, seed, size, temperature=1.0):
         probs = model.predict(tokens[None,:])
         # Extract the i-th probability vector and sample an index from it
 
-        next_token = sample_logits(probs[0, i-1, :], temperature=temperature)
+        next_token = util.sample_logits(probs[0, i-1, :], temperature=temperature)
 
         tokens[i] = next_token
 
@@ -181,6 +142,7 @@ def go(options):
             return ' '.join(id_to_word[id] for id in seq)
     else:
         raise Exception('Task {} not recognized.'.format(options.task))
+
     print('Data Loaded.')
 
     print(sum([b.shape[0] for b in x]), ' sentences loaded')
@@ -188,7 +150,6 @@ def go(options):
     # for i in range(3):
     #     print(x[i, :])
     #     print(decode(x[i, :]))
-
 
     ## Define model
     input = Input(shape=(None, ))
@@ -232,7 +193,7 @@ def go(options):
         epochs += options.out_every
 
         # Show samples for some sentences from random batches
-        for temp in [0.0, 0.5, 1, 2, 5]:
+        for temp in [0.0, 0.7, 1, 1.3, 1.5]:
             print('### TEMP ', temp)
             for i in range(CHECK):
                 b = random.choice(x)
