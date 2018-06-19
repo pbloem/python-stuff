@@ -87,7 +87,6 @@ def sparse_loss(y_true, y_pred):
 def go(options):
 
     slength = options.max_length
-    top_words = options.top_words
     lstm_hidden = options.lstm_capacity
 
     print('devices', device_lib.list_local_devices())
@@ -98,7 +97,7 @@ def go(options):
 
         dir = options.data_dir
         x, x_vocab_len, x_word_to_ix, x_ix_to_word = \
-            util.load_sentences(options.data_dir, vocab_size=top_words)
+            util.load_sentences(options.data_dir, vocab_size=options.top_words)
 
         # Finding the length of the longest sequence
         x_max_len = max([len(sentence) for sentence in x])
@@ -115,7 +114,7 @@ def go(options):
 
         dir = options.data_dir
         x, x_vocab_len, x_word_to_ix, x_ix_to_word, _, _, _, _ = \
-            util.load_data(dir+os.sep+'europarl-v8.fi-en.en', dir+os.sep+'europarl-v8.fi-en.fi', vocab_size=top_words)
+            util.load_data(dir+os.sep+'europarl-v8.fi-en.en', dir+os.sep+'europarl-v8.fi-en.fi', vocab_size=options.top_words)
 
         # Finding the length of the longest sequence
         x_max_len = max([len(sentence) for sentence in x])
@@ -135,7 +134,7 @@ def go(options):
 
     else:
         # Load only training sequences
-        (x, _), _ = imdb.load_data(num_words=top_words)
+        (x, _), _ = imdb.load_data(num_words=options.top_words)
 
         # rm start symbol
         x = [l[1:] for l in x]
@@ -155,11 +154,12 @@ def go(options):
     #     print(x[i, :])
     #     print(decode(x[i, :]))
 
+    num_words = len(x_ix_to_word)
 
     ## Define encoder
     input = Input(shape=(None, ), name='inp')
 
-    embedding = Embedding(top_words, options.embedding_size, input_length=None)
+    embedding = Embedding(num_words, options.embedding_size, input_length=None)
     embedded = embedding(input)
 
     h = Bidirectional(LSTM(lstm_hidden))(embedded)
@@ -196,7 +196,7 @@ def go(options):
     decoder_lstm = LSTM(lstm_hidden, return_sequences=True)
     h = decoder_lstm(seq, initial_state=[z_exp, z_exp])
 
-    towords = TimeDistributed(Dense(top_words))
+    towords = TimeDistributed(Dense(num_words))
     out = towords(h)
 
     auto = Model([input, input_shifted], out)
@@ -255,7 +255,7 @@ def go(options):
         for i in range(CHECK):
             b = random.choice(x)
 
-            z, _ = encoder.predict(b)
+            z = encoder.predict(b)
             z = z[None, 0, :]
 
             print('in    ',  decode(b[0, :]))
