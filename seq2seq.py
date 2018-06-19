@@ -187,14 +187,16 @@ def go(options):
     # zsample = Input(shape=(options.hidden,), name='inp-decoder-z')
     input_shifted = Input(shape=(None, ), name='inp-shifted')
 
-    expandz = Dense(lstm_hidden, input_shape=(options.hidden,))
-    z_exp = expandz(zsample)
+    expandz_h = Dense(lstm_hidden, input_shape=(options.hidden,))
+    expandz_c = Dense(lstm_hidden, input_shape=(options.hidden,))
+    z_exp_h = expandz_h(zsample)
+    z_exp_c = expandz_c(zsample)
 
     seq = embedding(input_shifted)
     seq = SpatialDropout1D(rate=options.dropout)(seq)
 
     decoder_lstm = LSTM(lstm_hidden, return_sequences=True)
-    h = decoder_lstm(seq, initial_state=[z_exp, z_exp])
+    h = decoder_lstm(seq, initial_state=[z_exp_h, z_exp_c])
 
     towords = TimeDistributed(Dense(num_words))
     out = towords(h)
@@ -212,8 +214,9 @@ def go(options):
     z_in = Input(shape=(options.hidden,))
     s_in = Input(shape=(None,))
     seq = embedding(s_in)
-    z_exp = expandz(z_in)
-    h = decoder_lstm(seq, initial_state=[z_exp, z_exp])
+    z_exp_h = expandz_h(z_in)
+    z_exp_c = expandz_c(z_in)
+    h = decoder_lstm(seq, initial_state=[z_exp_h, z_exp_c])
     out = towords(h)
     decoder = Model([s_in, z_in], out)
 
