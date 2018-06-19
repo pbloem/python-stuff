@@ -167,20 +167,22 @@ def go(options):
     tozmean = Dense(options.hidden)
     zmean = tozmean(h)
 
-    tozlsigma = Dense(options.hidden)
-    zlsigma = tozlsigma(h)
+    # tozlsigma = Dense(options.hidden)
+    # zlsigma = tozlsigma(h)
 
     ## Define KL Loss and sampling
 
-    kl = util.KLLayer(weight = K.variable(1.0)) # computes the KL loss and stores it for later
-    zmean, zlsigma = kl([zmean, zlsigma])
+    # kl = util.KLLayer(weight = K.variable(1.0)) # computes the KL loss and stores it for later
+    # zmean, zlsigma = kl([zmean, zlsigma])
 
-    eps = Input(shape=(options.hidden,), name='inp-epsilon')
+    # eps = Input(shape=(options.hidden,), name='inp-epsilon')
 
-    sample = util.Sample()
-    zsample = sample([zmean, zlsigma, eps])
+    # sample = util.Sample()
+    # zsample = sample([zmean, zlsigma, eps])
 
     ## Define decoder
+
+    zsample = zmean
 
     # zsample = Input(shape=(options.hidden,), name='inp-decoder-z')
     input_shifted = Input(shape=(None, ), name='inp-shifted')
@@ -197,7 +199,7 @@ def go(options):
     towords = TimeDistributed(Dense(top_words))
     out = towords(h)
 
-    auto = Model([input, input_shifted, eps], out)
+    auto = Model([input, input_shifted], out)
 
     ## Extract the encoder and decoder models form the autoencoder
 
@@ -205,7 +207,7 @@ def go(options):
     #   an autoencoder model that chains the two. For the life of me, I couldn't get it to work. For some reason the
     #   gradients don't seem to propagate down to the decoder. Let me know if you have better luck.
 
-    encoder = Model(input, [zmean, zlsigma])
+    encoder = Model(input, zmean)
 
     z_in = Input(shape=(options.hidden,))
     s_in = Input(shape=(None,))
@@ -213,7 +215,6 @@ def go(options):
     z_exp = expandz(z_in)
     h = decoder_lstm(seq, initial_state=[z_exp, z_exp])
     out = towords(h)
-
     decoder = Model([s_in, z_in], out)
 
     ## Compile the autoencoder model
@@ -233,8 +234,8 @@ def go(options):
 
     while epochs < options.epochs:
 
-        print('Set KL weight to ', anneal(epochs, options.epochs))
-        K.set_value(kl.weight, anneal(epochs, options.epochs))
+        # print('Set KL weight to ', anneal(epochs, options.epochs))
+        # K.set_value(kl.weight, anneal(epochs, options.epochs))
 
         for batch in tqdm(x):
             n, l = batch.shape
