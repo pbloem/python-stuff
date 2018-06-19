@@ -242,9 +242,9 @@ def go(options):
 
             batch_shifted = np.concatenate([np.ones((n, 1)), batch], axis=1)            # prepend start symbol
             batch_out = np.concatenate([batch, np.zeros((n, 1))], axis=1)[:, :, None]   # append pad symbol
-            eps = np.random.randn(n, options.hidden)   # random noise for the sampling layer
+            # eps = np.random.randn(n, options.hidden)   # random noise for the sampling layer
 
-            loss = auto.train_on_batch([batch, batch_shifted, eps], batch_out)
+            loss = auto.train_on_batch([batch, batch_shifted], batch_out)
 
             instances_seen += n
             tbw.add_scalar('seq2seq/batch-loss', float(loss), instances_seen)
