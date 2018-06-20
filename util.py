@@ -257,7 +257,7 @@ def sample(preds, temperature=1.0):
 
 def sample_logits(preds, temperature=1.0):
     """
-    Sample an index from a probability vector
+    Sample an index from a logit vector
 
     :param preds:
     :param temperature:

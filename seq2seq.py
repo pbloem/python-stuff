@@ -51,7 +51,7 @@ def generate_seq(
         lstm_layer = None,
         seed = np.ones(1), temperature=1.0):
 
-    # Keras doesn't allow us to easily execute seqence models step by step so we just feed it a zero-sequence multiple
+    # Keras doesn't allow us to easily execute sequence models step by step so we just feed it a zero-sequence multiple
     # times. At step i, we sample a word w from the predictions at i, and set that as element i+1 in the sequence.
 
     ls = seed.shape[0]
@@ -98,6 +98,9 @@ def go(options):
         dir = options.data_dir
         x, x_vocab_len, x_word_to_ix, x_ix_to_word = \
             util.load_sentences(options.data_dir, vocab_size=options.top_words)
+
+        if options.clip_length is not None:
+            x = [(sentence if len(sentence) < options.clip_length else sentence[:options.clip_length]) for sentence in x]
 
         # Finding the length of the longest sequence
         x_max_len = max([len(sentence) for sentence in x])
@@ -162,10 +165,10 @@ def go(options):
     embedding = Embedding(num_words, options.embedding_size, input_length=None)
     embedded = embedding(input)
 
-    h = Bidirectional(LSTM(lstm_hidden))(embedded)
+    output, state_h, state_c = LSTM(lstm_hidden, return_state=True)(embedded)
 
     tozmean = Dense(options.hidden)
-    zmean = tozmean(h)
+    zmean = tozmean(state_c if options.use_state else output)
 
     # tozlsigma = Dense(options.hidden)
     # zlsigma = tozlsigma(h)
@@ -241,6 +244,7 @@ def go(options):
         # K.set_value(kl.weight, anneal(epochs, options.epochs))
 
         for batch in tqdm(x):
+
             n, l = batch.shape
 
             batch_shifted = np.concatenate([np.ones((n, 1)), batch], axis=1)            # prepend start symbol
@@ -263,12 +267,23 @@ def go(options):
 
             print('in    ',  decode(b[0, :]))
 
-            gen = generate_seq(decoder, z=z)
+            l = 60 if options.clip_length is None else options.clip_length
+
+            gen = generate_seq(decoder, z=z, size=l)
             print('out 1 ', decode(gen))
-            gen = generate_seq(decoder, z=z)
+            gen = generate_seq(decoder, z=z, size=l)
             print('out 2 ', decode(gen))
-            gen = generate_seq(decoder, z=z)
+            gen = generate_seq(decoder, z=z, size=l, temperature=0.05)
             print('out 3 ', decode(gen))
+
+            n, _ = b.shape
+            b_shifted = np.concatenate([np.ones((n, 1)), b], axis=1)  # prepend start symbol
+
+            out = auto.predict([b, b_shifted])[None, 0, :]
+            out = np.argmax(out[0, ...], axis=1)
+            print(out)
+            print('recon ',  decode([int(o) for o in out]))
+
             print()
 
 if __name__ == "__main__":
@@ -341,10 +356,20 @@ if __name__ == "__main__":
                         help="Max length",
                         default=None, type=int)
 
+    parser.add_argument("-C", "--clip_length",
+                        dest="clip_length",
+                        help="If not None, all sentences longer than this length are clipped to this length.",
+                        default=None, type=int)
+
     parser.add_argument("-w", "--top_words",
                         dest="top_words",
                         help="Top words",
                         default=10000, type=int)
+
+    parser.add_argument("-S", "--use-state",
+                        dest="use_state",
+                        help="Use the last hidden (C) state of the encoder LSTM instead of the last output vector.",
+                        action='store_true')
 
     options = parser.parse_args()
 
