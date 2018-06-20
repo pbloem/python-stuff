@@ -37,6 +37,7 @@ import util
 
 INDEX_FROM = 3
 CHECK = 5
+NINTER = 10
 
 def anneal(step, total, k = 1.0, anneal_function='logistic'):
         if anneal_function == 'logistic':
@@ -167,26 +168,25 @@ def go(options):
 
     output, state_h, state_c = LSTM(lstm_hidden, return_state=True)(embedded)
 
-    tozmean = Dense(options.hidden)
-    zmean = tozmean(state_c if options.use_state else output)
+    h = state_c if options.use_state else output
 
-    # tozlsigma = Dense(options.hidden)
-    # zlsigma = tozlsigma(h)
+    tozmean = Dense(options.hidden)
+    zmean = tozmean(h)
+
+    tozlsigma = Dense(options.hidden)
+    zlsigma = tozlsigma(h)
 
     ## Define KL Loss and sampling
 
-    # kl = util.KLLayer(weight = K.variable(1.0)) # computes the KL loss and stores it for later
-    # zmean, zlsigma = kl([zmean, zlsigma])
+    kl = util.KLLayer(weight = K.variable(1.0)) # computes the KL loss and stores it for later
+    zmean, zlsigma = kl([zmean, zlsigma])
 
-    # eps = Input(shape=(options.hidden,), name='inp-epsilon')
+    eps = Input(shape=(options.hidden,), name='inp-epsilon')
 
-    # sample = util.Sample()
-    # zsample = sample([zmean, zlsigma, eps])
+    sample = util.Sample()
+    zsample = sample([zmean, zlsigma, eps])
 
     ## Define decoder
-
-    zsample = zmean
-
     # zsample = Input(shape=(options.hidden,), name='inp-decoder-z')
     input_shifted = Input(shape=(None, ), name='inp-shifted')
 
@@ -204,15 +204,15 @@ def go(options):
     towords = TimeDistributed(Dense(num_words))
     out = towords(h)
 
-    auto = Model([input, input_shifted], out)
+    auto = Model([input, input_shifted, eps], out)
 
     ## Extract the encoder and decoder models form the autoencoder
 
     # - NB: This isn't exactly DRY. It seems much nicer to build a separate encoder and decoder model and then build a
     #   an autoencoder model that chains the two. For the life of me, I couldn't get it to work. For some reason the
-    #   gradients don't seem to propagate down to the decoder. Let me know if you have better luck.
+    #   gradients don't seem to propagate down to the encoder. Let me know if you have better luck.
 
-    encoder = Model(input, zmean)
+    encoder = Model(input, [zmean, zlsigma])
 
     z_in = Input(shape=(options.hidden,))
     s_in = Input(shape=(None,))
@@ -243,15 +243,15 @@ def go(options):
         # print('Set KL weight to ', anneal(epochs, options.epochs))
         # K.set_value(kl.weight, anneal(epochs, options.epochs))
 
-        for batch in tqdm(x):
+        for batch in tqdm(x[:50]):
 
             n, l = batch.shape
 
             batch_shifted = np.concatenate([np.ones((n, 1)), batch], axis=1)            # prepend start symbol
             batch_out = np.concatenate([batch, np.zeros((n, 1))], axis=1)[:, :, None]   # append pad symbol
-            # eps = np.random.randn(n, options.hidden)   # random noise for the sampling layer
+            eps = np.random.randn(n, options.hidden)   # random noise for the sampling layer
 
-            loss = auto.train_on_batch([batch, batch_shifted], batch_out)
+            loss = auto.train_on_batch([batch, batch_shifted, eps], batch_out)
 
             instances_seen += n
             tbw.add_scalar('seq2seq/batch-loss', float(loss), instances_seen)
@@ -260,30 +260,48 @@ def go(options):
 
         # show samples for some sentences from random batches
         for i in range(CHECK):
+
+            # CHECK 1. Generate some sentences from a z vector for a random
+            # sentence from the corpus
             b = random.choice(x)
 
-            z = encoder.predict(b)
+            z, _ = encoder.predict(b)
             z = z[None, 0, :]
 
-            print('in    ',  decode(b[0, :]))
+            print('in             ',  decode(b[0, :]))
 
             l = 60 if options.clip_length is None else options.clip_length
 
             gen = generate_seq(decoder, z=z, size=l)
-            print('out 1 ', decode(gen))
-            gen = generate_seq(decoder, z=z, size=l)
-            print('out 2 ', decode(gen))
+            print('out 1          ', decode(gen))
             gen = generate_seq(decoder, z=z, size=l, temperature=0.05)
-            print('out 3 ', decode(gen))
+            print('out 2 (t0.05)  ', decode(gen))
+            gen = generate_seq(decoder, z=z, size=l, temperature=0.0)
+            print('out 3 (greedy) ', decode(gen))
 
+            # CHECK 2. Show the argmax reconstruction (i
             n, _ = b.shape
             b_shifted = np.concatenate([np.ones((n, 1)), b], axis=1)  # prepend start symbol
+            eps = np.random.randn(n, options.hidden)   # random noise for the sampling layer
 
-            out = auto.predict([b, b_shifted])[None, 0, :]
+            out = auto.predict([b, b_shifted, eps])[None, 0, :]
             out = np.argmax(out[0, ...], axis=1)
             print(out)
             print('recon ',  decode([int(o) for o in out]))
 
+            print()
+
+        for i in range(CHECK):
+
+            # CHECK 3: Sample two z's from N(0,1) and interpolate between them
+            # Here we use use greedy decoding: i.e. we pick the word that gets the highest
+            # probability
+
+            zfrom, zto = np.random.randn(1, options.hidden), np.random.randn(1, options.hidden)
+            for d in np.linspace(0, 1, num=NINTER):
+                z = zfrom * (1-d) + zto * d
+                gen = generate_seq(decoder, z=z, size=l, temperature=0.0)
+                print('out (d={:.1}) \t'.format(d), decode(gen))
             print()
 
 if __name__ == "__main__":
