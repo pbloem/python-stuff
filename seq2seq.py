@@ -166,9 +166,7 @@ def go(options):
     embedding = Embedding(num_words, options.embedding_size, input_length=None)
     embedded = embedding(input)
 
-    output, state_h, state_c = LSTM(lstm_hidden, return_state=True)(embedded)
-
-    h = state_c if options.use_state else output
+    h = Bidirectional(LSTM(lstm_hidden))(embedded)
 
     tozmean = Dense(options.hidden)
     zmean = tozmean(h)
@@ -386,11 +384,11 @@ if __name__ == "__main__":
                         dest="top_words",
                         help="Top words",
                         default=10000, type=int)
-
-    parser.add_argument("-S", "--use-state",
-                        dest="use_state",
-                        help="Use the last hidden (C) state of the encoder LSTM instead of the last output vector.",
-                        action='store_true')
+    #
+    # parser.add_argument("-S", "--use-state",
+    #                     dest="use_state",
+    #                     help="Use the last hidden (C) state of the encoder LSTM instead of the last output vector.",
+    #                     action='store_true')
 
     options = parser.parse_args()
 
