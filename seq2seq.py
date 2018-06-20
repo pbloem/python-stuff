@@ -232,16 +232,17 @@ def go(options):
     auto.compile(opt, sparse_loss)
     auto.summary()
 
-    epochs = 0
+    epoch = 0
     instances_seen = 0
 
     # DEBUG
     # x = x[:20]
 
-    while epochs < options.epochs:
+    while epoch < options.epochs:
 
-        # print('Set KL weight to ', anneal(epochs, options.epochs))
-        # K.set_value(kl.weight, anneal(epochs, options.epochs))
+        klw = anneal(epoch, options.epochs)
+        print('EPOCH {:03}: Set KL weight to {}'.format(epoch, klw))
+        K.set_value(kl.weight, klw)
 
         for batch in tqdm(x[:50]):
 
@@ -256,53 +257,55 @@ def go(options):
             instances_seen += n
             tbw.add_scalar('seq2seq/batch-loss', float(loss), instances_seen)
 
-        epochs += options.out_every
+        epoch += 1
 
-        # show samples for some sentences from random batches
-        for i in range(CHECK):
+        if epoch % options.out_every == 0:
 
-            # CHECK 1. Generate some sentences from a z vector for a random
-            # sentence from the corpus
-            b = random.choice(x)
+            # show samples for some sentences from random batches
+            for i in range(CHECK):
 
-            z, _ = encoder.predict(b)
-            z = z[None, 0, :]
+                # CHECK 1. Generate some sentences from a z vector for a random
+                # sentence from the corpus
+                b = random.choice(x)
 
-            print('in             ',  decode(b[0, :]))
+                z, _ = encoder.predict(b)
+                z = z[None, 0, :]
 
-            l = 60 if options.clip_length is None else options.clip_length
+                print('in             ',  decode(b[0, :]))
 
-            gen = generate_seq(decoder, z=z, size=l)
-            print('out 1          ', decode(gen))
-            gen = generate_seq(decoder, z=z, size=l, temperature=0.05)
-            print('out 2 (t0.05)  ', decode(gen))
-            gen = generate_seq(decoder, z=z, size=l, temperature=0.0)
-            print('out 3 (greedy) ', decode(gen))
+                l = 60 if options.clip_length is None else options.clip_length
 
-            # CHECK 2. Show the argmax reconstruction (i
-            n, _ = b.shape
-            b_shifted = np.concatenate([np.ones((n, 1)), b], axis=1)  # prepend start symbol
-            eps = np.random.randn(n, options.hidden)   # random noise for the sampling layer
-
-            out = auto.predict([b, b_shifted, eps])[None, 0, :]
-            out = np.argmax(out[0, ...], axis=1)
-            print(out)
-            print('recon ',  decode([int(o) for o in out]))
-
-            print()
-
-        for i in range(CHECK):
-
-            # CHECK 3: Sample two z's from N(0,1) and interpolate between them
-            # Here we use use greedy decoding: i.e. we pick the word that gets the highest
-            # probability
-
-            zfrom, zto = np.random.randn(1, options.hidden), np.random.randn(1, options.hidden)
-            for d in np.linspace(0, 1, num=NINTER):
-                z = zfrom * (1-d) + zto * d
+                gen = generate_seq(decoder, z=z, size=l)
+                print('out 1          ', decode(gen))
+                gen = generate_seq(decoder, z=z, size=l, temperature=0.05)
+                print('out 2 (t0.05)  ', decode(gen))
                 gen = generate_seq(decoder, z=z, size=l, temperature=0.0)
-                print('out (d={:.1}) \t'.format(d), decode(gen))
-            print()
+                print('out 3 (greedy) ', decode(gen))
+
+                # CHECK 2. Show the argmax reconstruction (i
+                n, _ = b.shape
+                b_shifted = np.concatenate([np.ones((n, 1)), b], axis=1)  # prepend start symbol
+                eps = np.random.randn(n, options.hidden)   # random noise for the sampling layer
+
+                out = auto.predict([b, b_shifted, eps])[None, 0, :]
+                out = np.argmax(out[0, ...], axis=1)
+                print(out)
+                print('recon ',  decode([int(o) for o in out]))
+
+                print()
+
+            for i in range(CHECK):
+
+                # CHECK 3: Sample two z's from N(0,1) and interpolate between them
+                # Here we use use greedy decoding: i.e. we pick the word that gets the highest
+                # probability
+
+                zfrom, zto = np.random.randn(1, options.hidden), np.random.randn(1, options.hidden)
+                for d in np.linspace(0, 1, num=NINTER):
+                    z = zfrom * (1-d) + zto * d
+                    gen = generate_seq(decoder, z=z, size=l, temperature=0.0)
+                    print('out (d={:.1}) \t'.format(d), decode(gen))
+                print()
 
 if __name__ == "__main__":
 
