@@ -242,7 +242,7 @@ def go(options):
         print('EPOCH {:03}: Set KL weight to {}'.format(epoch, klw))
         K.set_value(kl.weight, klw)
 
-        for batch in tqdm(x[:50]):
+        for batch in tqdm(x):
 
             n, l = batch.shape
 
