@@ -21,6 +21,8 @@ Based on https://github.com/ChunML/seq2seq/blob/master/seq2seq_utils.py
 
 """
 
+EXTRA_SYMBOLS = ['<PAD>', '<START>', '<UNK>', '<EOS>']
+
 def load_data(source, dist, vocab_size=10000, limit=None):
 
     # Reading raw text from source and destination files
@@ -43,14 +45,14 @@ def load_data(source, dist, vocab_size=10000, limit=None):
 
     # Creating the vocabulary set with the most common words (leaving room for PAD, START, UNK)
     dist = FreqDist(np.hstack(X))
-    X_vocab = dist.most_common(vocab_size - 3)
+    X_vocab = dist.most_common(vocab_size - len(EXTRA_SYMBOLS))
     dist = FreqDist(np.hstack(y))
-    y_vocab = dist.most_common(vocab_size - 3)
+    y_vocab = dist.most_common(vocab_size - len(EXTRA_SYMBOLS))
 
     # Creating an array of words from the vocabulary set, we will use this array as index-to-word dictionary
     X_ix_to_word = [word[0] for word in X_vocab]
     # Adding the word "ZERO" to the beginning of the array
-    X_ix_to_word = ['<PAD>', '<START>', '<UNK>'] + X_ix_to_word
+    X_ix_to_word = EXTRA_SYMBOLS + X_ix_to_word
 
     # Creating the word-to-index dictionary from the array created above
     X_word_to_ix = {word:ix for ix, word in enumerate(X_ix_to_word)}
@@ -72,7 +74,7 @@ def load_data(source, dist, vocab_size=10000, limit=None):
     #     print('___ ', ' '.join(X_ix_to_word[id] for id in X[s]))
 
     y_ix_to_word = [word[0] for word in y_vocab]
-    y_ix_to_word = ['<PAD>', '<START>', '<UNK>'] + y_ix_to_word
+    y_ix_to_word = EXTRA_SYMBOLS + y_ix_to_word
 
     y_word_to_ix = {word:ix for ix, word in enumerate(y_ix_to_word)}
 
@@ -103,12 +105,12 @@ def load_sentences(source, vocab_size=10000, limit=None):
 
     # Creating the vocabulary set with the most common words (leaving room for PAD, START, UNK)
     dist = FreqDist(np.hstack(X))
-    X_vocab = dist.most_common(vocab_size - 3)
+    X_vocab = dist.most_common(vocab_size - len(EXTRA_SYMBOLS))
 
     # Creating an array of words from the vocabulary set, we will use this array as index-to-word dictionary
     X_ix_to_word = [word[0] for word in X_vocab]
     # Adding the word "ZERO" to the beginning of the array
-    X_ix_to_word = ['<PAD>', '<START>', '<UNK>'] + X_ix_to_word
+    X_ix_to_word = EXTRA_SYMBOLS + X_ix_to_word
 
     # Creating the word-to-index dictionary from the array created above
     X_word_to_ix = {word:ix for ix, word in enumerate(X_ix_to_word)}
@@ -181,7 +183,7 @@ def process_data(word_sentences, max_len, word_to_ix):
     return sequences
 
 
-def batch_pad(x, batch_size, min_length=3):
+def batch_pad(x, batch_size, min_length=3, add_eos=False):
     """
     Takes a list of integer sequences, sorts them by lengths and pads them so that sentences in each batch have the
     same length.
@@ -191,6 +193,11 @@ def batch_pad(x, batch_size, min_length=3):
     """
 
     x = sorted(x, key=lambda l : len(l))
+
+    if add_eos:
+        eos = EXTRA_SYMBOLS.index('<EOS>')
+        x = [sent + [eos,] for sent in x]
+
     batches = []
 
     start = 0
@@ -202,6 +209,7 @@ def batch_pad(x, batch_size, min_length=3):
         batch = x[start:end]
 
         mlen = max([len(l) for l in batch])
+
         if mlen >= min_length:
             batch = sequence.pad_sequences(batch, maxlen=mlen, dtype='int32', padding='post', truncating='post')
 

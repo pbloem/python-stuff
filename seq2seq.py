@@ -42,15 +42,15 @@ NINTER = 10
 def anneal(step, total, k = 1.0, anneal_function='logistic'):
         if anneal_function == 'logistic':
             return float(1/(1+np.exp(-k*(step-total/2))))
+
         elif anneal_function == 'linear':
             return min(1, step/total)
 
 def generate_seq(
-        model : Model,
-        z,
+        model : Model, z,
         size = 60,
         lstm_layer = None,
-        seed = np.ones(1), temperature=1.0):
+        seed = np.ones(1), temperature=1.0, stop_at_eos=True):
 
     # Keras doesn't allow us to easily execute sequence models step by step so we just feed it a zero-sequence multiple
     # times. At step i, we sample a word w from the predictions at i, and set that as element i+1 in the sequence.
@@ -67,7 +67,13 @@ def generate_seq(
 
         tokens[i] = next_token
 
-    return [int(t) for t in tokens]
+    result = [int(t) for t in tokens]
+
+    if stop_at_eos:
+        if 3 in result and result.index(3) != len(result) - 1:
+            result = result[:result.index(3)+1]
+
+    return result
 
 
 def decode_imdb(seq):
@@ -109,7 +115,7 @@ def go(options):
         print('max sequence length ', x_max_len)
         print(len(x_ix_to_word), 'distinct words')
 
-        x = util.batch_pad(x, options.batch)
+        x = util.batch_pad(x, options.batch, add_eos=True)
 
         def decode(seq):
             return ' '.join(x_ix_to_word[id] for id in seq)
