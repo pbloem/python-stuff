@@ -115,7 +115,7 @@ def go(options):
         print('max sequence length ', x_max_len)
         print(len(x_ix_to_word), 'distinct words')
 
-        x = util.batch_pad(x, options.batch, add_eos=True)
+        x = util.batch_pad(x, options.batch, add_eos=True, extra_padding=5)
 
         def decode(seq):
             return ' '.join(x_ix_to_word[id] for id in seq)
