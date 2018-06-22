@@ -39,12 +39,12 @@ INDEX_FROM = 3
 CHECK = 5
 NINTER = 10
 
-def anneal(step, total, k = 1.0, anneal_function='logistic'):
+def anneal(step, total, k = 1.0, anneal_function='linear'):
         if anneal_function == 'logistic':
             return float(1/(1+np.exp(-k*(step-total/2))))
 
         elif anneal_function == 'linear':
-            return min(1, step/total)
+            return min(1, step/(total/2))
 
 def generate_seq(
         model : Model, z,
