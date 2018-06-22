@@ -6,7 +6,7 @@ from keras.datasets import imdb
 from keras.models import Sequential, Model
 from keras.layers import \
     Dense, Activation, Conv2D, MaxPool2D, Dropout, Flatten, Input, Reshape, LSTM, Embedding, RepeatVector,\
-    TimeDistributed, Bidirectional, Concatenate, Lambda, SpatialDropout1D, Softmax
+    TimeDistributed, Bidirectional, Concatenate, Lambda, SpatialDropout1D, Softmax, GRU
 from keras.optimizers import Adam
 from tensorflow.python.client import device_lib
 
@@ -172,7 +172,8 @@ def go(options):
     embedding = Embedding(num_words, options.embedding_size, input_length=None)
     embedded = embedding(input)
 
-    h = Bidirectional(LSTM(lstm_hidden))(embedded)
+    encoder = LSTM(lstm_hidden) if options.rnn_type == 'lstm' else GRU(lstm_hidden)
+    h = Bidirectional(encoder)(embedded)
 
     tozmean = Dense(options.hidden)
     zmean = tozmean(h)
@@ -194,16 +195,21 @@ def go(options):
     # zsample = Input(shape=(options.hidden,), name='inp-decoder-z')
     input_shifted = Input(shape=(None, ), name='inp-shifted')
 
-    expandz_h = Dense(lstm_hidden, input_shape=(options.hidden,))
-    expandz_c = Dense(lstm_hidden, input_shape=(options.hidden,))
-    z_exp_h = expandz_h(zsample)
-    z_exp_c = expandz_c(zsample)
+    if options.rnn_type == 'lstm':
+        expandz_h = Dense(lstm_hidden, input_shape=(options.hidden,))
+        expandz_c = Dense(lstm_hidden, input_shape=(options.hidden,))
+        z_exp_h = expandz_h(zsample)
+        z_exp_c = expandz_c(zsample)
+        state = [z_exp_h, z_exp_c]
+    else:
+        expandz = Dense(lstm_hidden, input_shape=(options.hidden,))
+        state = expandz(zsample)
 
     seq = embedding(input_shifted)
     seq = SpatialDropout1D(rate=options.dropout)(seq)
 
-    decoder_lstm = LSTM(lstm_hidden, return_sequences=True)
-    h = decoder_lstm(seq, initial_state=[z_exp_h, z_exp_c])
+    decoder_rnn = LSTM(lstm_hidden, return_sequences=True) if options.rnn_type == 'lstm' else GRU(lstm_hidden, return_sequences=True)
+    h = decoder_rnn(seq, initial_state=state)
 
     towords = TimeDistributed(Dense(num_words))
     out = towords(h)
@@ -221,9 +227,13 @@ def go(options):
     z_in = Input(shape=(options.hidden,))
     s_in = Input(shape=(None,))
     seq = embedding(s_in)
-    z_exp_h = expandz_h(z_in)
-    z_exp_c = expandz_c(z_in)
-    h = decoder_lstm(seq, initial_state=[z_exp_h, z_exp_c])
+    if options.rnn_type == 'lstm':
+        z_exp_h = expandz_h(z_in)
+        z_exp_c = expandz_c(z_in)
+        state = [z_exp_h, z_exp_c]
+    else:
+        state = expandz(z_in)
+    h = decoder_rnn(seq, initial_state=state)
     out = towords(h)
     decoder = Model([s_in, z_in], out)
 
@@ -320,6 +330,11 @@ if __name__ == "__main__":
                         dest="epochs",
                         help="Number of epochs.",
                         default=150, type=int)
+
+    parser.add_argument("-R", "--rnn-type",
+                        dest="rnn_type",
+                        help="Type of RNN to use [lstm, gru].",
+                        default='lstm', type=str)
 
     parser.add_argument("-E", "--embedding-size",
                         dest="embedding_size",
