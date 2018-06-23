@@ -15,6 +15,9 @@ from keras.preprocessing import sequence
 
 from scipy.misc import logsumexp
 
+from collections import defaultdict, Counter, OrderedDict
+
+
 """
 
 Based on https://github.com/ChunML/seq2seq/blob/master/seq2seq_utils.py
@@ -88,7 +91,7 @@ def load_data(source, dist, vocab_size=10000, limit=None):
     return X, len(X_vocab)+2, X_word_to_ix, X_ix_to_word, \
            y, len(y_vocab)+2, y_word_to_ix, y_ix_to_word
 
-def load_sentences(source, vocab_size=10000, limit=None):
+def load_sentences(source, vocab_size=10000, limit=None, max_length=None):
 
     # Reading raw text from source and destination files
     f = open(source, 'r')
@@ -102,6 +105,9 @@ def load_sentences(source, vocab_size=10000, limit=None):
 
     # Splitting raw text into array of sequences
     X = [text_to_word_sequence(x) for x in X_data.split('\n') if len(x) > 0]
+
+    if max_length is not None:
+        X = [x for x in X if len(x) <= max_length]
 
     # Creating the vocabulary set with the most common words (leaving room for PAD, START, UNK)
     dist = FreqDist(np.hstack(X))
@@ -332,3 +338,38 @@ class Sample(Layer):
     def compute_output_shape(self, input_shape):
         shape_mu, _, _ = input_shape
         return shape_mu
+
+def interpolate(start, end, steps):
+
+    result = np.zeros((steps+2, start.shape[0]))
+    for i, d in enumerate(np.linspace(0,1, steps+2)):
+        result[i, :] = start * (1-d) + end * d
+
+    return result
+
+
+class OrderedCounter(Counter, OrderedDict):
+    'Counter that remembers the order elements are first encountered'
+
+    def __repr__(self):
+        return '%s(%r)' % (self.__class__.__name__, OrderedDict(self))
+
+    def __reduce__(self):
+        return self.__class__, (OrderedDict(self),)
+
+def idx2word(idx, i2w, pad_idx):
+
+    sent_str = [str()]*len(idx)
+
+    for i, sent in enumerate(idx):
+
+        for word_id in sent:
+
+            if word_id == pad_idx:
+                break
+            sent_str[i] += i2w[str(word_id.item())] + " "
+
+        sent_str[i] = sent_str[i].strip()
+
+
+    return sent_str

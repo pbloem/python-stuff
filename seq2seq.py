@@ -115,7 +115,7 @@ def go(options):
         print('max sequence length ', x_max_len)
         print(len(x_ix_to_word), 'distinct words')
 
-        x = util.batch_pad(x, options.batch, add_eos=True, extra_padding=5)
+        x = util.batch_pad(x, options.batch, add_eos=True)
 
         def decode(seq):
             return ' '.join(x_ix_to_word[id] for id in seq)
@@ -183,7 +183,8 @@ def go(options):
 
     ## Define KL Loss and sampling
 
-    kl = util.KLLayer(weight = K.variable(1.0)) # computes the KL loss and stores it for later
+    # kl = util.KLLayer(weight = K.variable(1.0)) # computes the KL loss and stores it for later
+    kl = util.KLLayer() # computes the KL loss and stores it for later
     zmean, zlsigma = kl([zmean, zlsigma])
 
     eps = Input(shape=(options.hidden,), name='inp-epsilon')
@@ -254,9 +255,9 @@ def go(options):
 
     while epoch < options.epochs:
 
-        klw = anneal(epoch, options.epochs)
-        print('EPOCH {:03}: Set KL weight to {}'.format(epoch, klw))
-        K.set_value(kl.weight, klw)
+        # klw = anneal(epoch, options.epochs)
+        # print('EPOCH {:03}: Set KL weight to {}'.format(epoch, klw))
+        # K.set_value(kl.weight, klw)
 
         for batch in tqdm(x):
 
@@ -315,6 +316,7 @@ def go(options):
                 # probability
 
                 zfrom, zto = np.random.randn(1, options.hidden), np.random.randn(1, options.hidden)
+
                 for d in np.linspace(0, 1, num=NINTER):
                     z = zfrom * (1-d) + zto * d
                     gen = generate_seq(decoder, z=z, size=l, temperature=0.0)
