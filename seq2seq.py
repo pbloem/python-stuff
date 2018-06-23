@@ -268,10 +268,9 @@ def go(options):
             eps = np.random.randn(n, options.hidden)   # random noise for the sampling layer
 
             loss = auto.train_on_batch([batch, batch_shifted, eps], batch_out)
-            print(loss)
 
             instances_seen += n
-            tbw.add_scalar('seq2seq/batch-loss', float(loss), instances_seen)
+            tbw.add_scalar('seq2seq/batch-loss', float(loss)/l, instances_seen)
 
         epoch += 1
 
