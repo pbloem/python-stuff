@@ -50,7 +50,7 @@ def generate_seq(
         model : Model, z,
         size = 60,
         lstm_layer = None,
-        seed = np.ones(1), temperature=1.0, stop_at_eos=True):
+        seed = np.ones(1), temperature=1.0, stop_at_eos=False):
 
     # Keras doesn't allow us to easily execute sequence models step by step so we just feed it a zero-sequence multiple
     # times. At step i, we sample a word w from the predictions at i, and set that as element i+1 in the sequence.
