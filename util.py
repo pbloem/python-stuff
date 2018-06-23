@@ -315,7 +315,11 @@ class KLLayer(Layer):
                                 K.square(mu) -
                                 K.exp(log_var), axis=-1)
 
-        self.add_loss((1.0 if self.weight is None else self.weight) * K.mean(kl_batch), inputs=inputs)
+        loss =  K.mean(kl_batch)
+        if self.weight is not None:
+            loss = loss * self.weight
+
+        self.add_loss(loss, inputs=inputs)
 
         return inputs
 

@@ -89,7 +89,8 @@ def decode_imdb(seq):
     return ' '.join(id_to_word[id] for id in seq)
 
 def sparse_loss(y_true, y_pred):
-    return K.sparse_categorical_crossentropy(y_true, y_pred, from_logits=True)
+    losses = K.sparse_categorical_crossentropy(y_true, y_pred, from_logits=True)
+    return K.sum(losses, axis=-1)
 
 def go(options):
 
@@ -183,8 +184,7 @@ def go(options):
 
     ## Define KL Loss and sampling
 
-    # kl = util.KLLayer(weight = K.variable(1.0)) # computes the KL loss and stores it for later
-    kl = util.KLLayer() # computes the KL loss and stores it for later
+    kl = util.KLLayer(weight = K.variable(1.0)) # computes the KL loss and stores it for later
     zmean, zlsigma = kl([zmean, zlsigma])
 
     eps = Input(shape=(options.hidden,), name='inp-epsilon')
@@ -255,9 +255,9 @@ def go(options):
 
     while epoch < options.epochs:
 
-        # klw = anneal(epoch, options.epochs)
-        # print('EPOCH {:03}: Set KL weight to {}'.format(epoch, klw))
-        # K.set_value(kl.weight, klw)
+        klw = anneal(epoch, options.epochs)
+        print('EPOCH {:03}: Set KL weight to {}'.format(epoch, klw))
+        K.set_value(kl.weight, klw)
 
         for batch in tqdm(x):
 
@@ -268,6 +268,7 @@ def go(options):
             eps = np.random.randn(n, options.hidden)   # random noise for the sampling layer
 
             loss = auto.train_on_batch([batch, batch_shifted, eps], batch_out)
+            print(loss)
 
             instances_seen += n
             tbw.add_scalar('seq2seq/batch-loss', float(loss), instances_seen)
